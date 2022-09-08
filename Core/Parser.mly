@@ -68,25 +68,17 @@ expr :
         { $1 }
 
     | TOK_KW_FORALL param_list TOK_MINUS_GT expr
-        { List.fold_right
-              (fun (span, param) body ->
-                  { span = join_span span body.span; shape = E_TyFun(param, body) })
-              $2 $4 }
+        { List.fold_right (fun param body -> mk_expr @@ E_TyFun(param, body)) $2 $4 }
 
     | binary_op_expr TOK_MINUS_GT expr
         { mk_expr @@ E_TyFun(("", $1), $3) }
 
     | TOK_KW_FUN param_list_opt_ann TOK_MINUS_GT expr
-        { List.fold_right
-              (fun (span, param) body ->
-                  { span = join_span span body.span; shape = E_Fun(param, body) })
-              $2 $4 }
+        { List.fold_right (fun param body -> mk_expr @@ E_Fun(param, body)) $2 $4 }
 
     | TOK_KW_EXISTS param_list TOK_MINUS_GT expr
-        { List.fold_right
-              (fun (span, param) body ->
-                  { span = join_span span body.span; shape = E_TyPair(param, body) })
-              $2 $4 }
+        { List.fold_right (fun param body -> mk_expr @@ E_TyPair(param, body)) $2 $4 }
+
     | error
         { error "expecting expression" }
 ;
@@ -136,19 +128,34 @@ atom_expr :
 
 
 param_list :
-    | TOK_LPAREN TOK_NAME TOK_COLON expr TOK_RPAREN
-        { [cur_span (), ($2, $4)] }
-    | TOK_LPAREN TOK_NAME TOK_COLON expr TOK_RPAREN param_list
-        { (cur_span (), ($2, $4)) :: $6 }
+    | param_decl
+        { $1 }
+    | param_decl param_list
+        { $1 @ $2 }
 ;
 
+
 param_list_opt_ann :
-    | TOK_LPAREN TOK_NAME TOK_COLON expr TOK_RPAREN
-        { [cur_span (), ($2, Some $4)] }
+    | param_decl_opt_ann
+        { $1 }
+    | param_decl_opt_ann param_list_opt_ann
+        { $1 @ $2 }
+;
+
+
+param_decl :
+    | TOK_LPAREN name_list_nonempty TOK_COLON expr TOK_RPAREN
+        { List.map (fun name -> (name, $4)) $2 }
+;
+
+param_decl_opt_ann :
+    | TOK_LPAREN name_list_nonempty TOK_COLON expr TOK_RPAREN
+        { List.map (fun name -> (name, Some $4)) $2 }
     | TOK_NAME
-        { [cur_span (), ($1, None)] }
-    | TOK_LPAREN TOK_NAME TOK_COLON expr TOK_RPAREN param_list_opt_ann
-        { (cur_span (), ($2, Some $4)) :: $6 }
-    | TOK_NAME param_list_opt_ann
-        { (cur_span (), ($1, None)) :: $2 }
+        { [$1, None] }
+;
+
+name_list_nonempty :
+    | TOK_NAME                    { [$1] }
+    | TOK_NAME name_list_nonempty { $1 :: $2 }
 ;
