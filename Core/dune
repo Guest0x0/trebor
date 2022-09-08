@@ -1,0 +1,12 @@
+
+(library
+ (name core)
+ (modules Syntax Normalization Typecheck Parser Lexer))
+
+(test
+ (name CoreTest)
+ (libraries core)
+ (modules CoreTest))
+
+(ocamlyacc Parser)
+(ocamllex  Lexer)
