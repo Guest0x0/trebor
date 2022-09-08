@@ -113,6 +113,9 @@ is done via a explicit operator.
 The operator accumulates on global variables and is structural on all other term formers
 
 
+## License
+This project is distributed under the zero clause BSD license. See `LICENSE`.
+
 
 ## References
 
