@@ -27,15 +27,14 @@ AFAIK, OTT is currently the most promising approach to extensional equality prin
 
 | type theory | funext | UIP | canonicity | normalization   | regularity<sup>1</sup> |
 |-------------|--------|-----|------------|-----------------|------------------------|
-| ITT         | no     | no  | yes        | yes             | no                     |
-| ITT + axiom | yes    | yes | no         | yes             | no                     |
+| ITT         | no     | no  | yes        | yes             | yes                    |
+| ITT + axiom | yes    | yes | no         | yes             | yes                    |
 | ITT + irr.  | no     | yes | yes        | yes?<sup>2</sup>| yes                    |
 | ETT         | yes    | yes | yes        | no<sup>3</sup>  | yes                    |
-| HoTT/Cubical| yes    | no  | yes        | yes (no NBE yet)| no/difficult           |
+| HoTT/Cubical| yes    | no  | yes        | yes (no NBE yet)| yes/difficult          |
 | OTT         | yes    | yes | yes        | yes             | possible (see [2](#ref-2))|
 
-1: whether eliminating a equality between the same (neutral) term (i.e. `a = a`)
-computes to the identity.
+1: whether eliminating `refl` computes to the identity.
 
 2: there are sound NBE implementations that lack universe hierarchy [4](#ref-4).
 However, adding too much irrelevance and impredicativity breaks normalization [5](#ref-5)
