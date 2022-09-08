@@ -7,11 +7,11 @@ type core =
 
     | C_Type of int
 
-    | C_TyFun of core * core
-    | C_Fun   of core
+    | C_TyFun of (string * core) * core
+    | C_Fun   of string * core
     | C_App   of core * core
 
-    | C_TyPair of core * core
+    | C_TyPair of (string * core) * core
     | C_Pair   of core * core
     | C_Proj   of core * [`Fst | `Snd]
 
@@ -60,3 +60,13 @@ and expr_shape =
 type top_level =
     | AxiomDecl  of string * expr
     | Definition of string * expr
+
+
+
+type error =
+    | UnboundVar   of string
+    | CannotInfer  of string
+    | WrongType    of (string * core) list * core * string
+    | TypeMismatch of (string * core) list * core * core * string
+
+exception TypeError of span * error

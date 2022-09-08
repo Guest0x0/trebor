@@ -8,7 +8,13 @@ let parse_string src    = parse_lexbuf (Lexing.from_string src)
 let globals = Prelude.make_globals 37
 
 
-let _ = Typecheck.process_program globals @@ parse_string "
+let run program =
+    try ignore @@ Typecheck.process_program globals program with
+      exn -> Format.printf "%a@ " Pretty.pp_exception exn
+
+
+let _ = Format.printf "@[<v>"
+let _ = run @@ parse_string "
 let fun-eta : forall (A : Type 0) (B : A -> Type 0) ->
     forall (f : forall (a : A) -> B a) -> f = (fun (a : A) -> f a)
 let fun-eta = fun A B f -> eq-refl (forall (a : A) -> B a) f
@@ -65,3 +71,4 @@ let bad = fun A eq ->
 
 let normalize-bad = fun (P : type-of-bad -> Type 0) (f : type-of-bad -> P bad) -> f bad
 "
+let _ = Format.printf "@]"
