@@ -19,7 +19,7 @@ to implement some full-scale type checker/dependently typed language.
 Extensional equality principles are very useful for
 both math formalization and proving program properties,
 but has long been a second-class citizen in proof assistants due to technical difficulties.
-OTT [1](#ref-1) [2](#ref-2) [3](#ref-3) is an approach to integrate
+OTT [[1]](#ref-1) [[2]](#ref-2) [[3]](#ref-3) is an approach to integrate
 extensional principles into intensional type theory,
 while retaining good metatheory properties like canonicity and strong normalization.
 
@@ -32,49 +32,49 @@ AFAIK, OTT is currently the most promising approach to extensional equality prin
 | ITT + irr.  | no     | yes | yes        | yes?<sup>2</sup>| yes                    |
 | ETT         | yes    | yes | yes        | no<sup>3</sup>  | yes                    |
 | HoTT/Cubical| yes    | no  | yes        | yes (no NBE yet)| yes/difficult          |
-| OTT         | yes    | yes | yes        | yes             | possible (see [2](#ref-2))|
+| OTT         | yes    | yes | yes        | yes             | possible (see [[2]](#ref-2))|
 
 1: whether eliminating `refl` computes to the identity.
 
-2: there are sound NBE implementations that lack universe hierarchy [4](#ref-4).
-However, adding too much irrelevance and impredicativity breaks normalization [5](#ref-5)
+2: there are sound NBE implementations that lack universe hierarchy [[4]](#ref-4).
+However, adding too much irrelevance and impredicativity breaks normalization [[5]](#ref-5)
 
 3: type checking ETT itself is very difficult, due to the need to automatically "guess"
 propositional equalities.
-This difficulty can be avoided by requiring user annotations [6](#ref-6).
-But even so, ETT fails to normalize (e.g. see [6](#ref-6)) in the presence of universe/large elimination.
+This difficulty can be avoided by requiring user annotations [[6]](#ref-6).
+But even so, ETT fails to normalize (e.g. see [[6]](#ref-6)) in the presence of universe/large elimination.
 Also, ETT allows ill-typed open terms such as `0 1` or `fst (\x. x)`,
-making type-directed normalization very difficult. See [7](#ref-7) for some discussions.
+making type-directed normalization very difficult. See [[7]](#ref-7) for some discussions.
 
 
 
 Despite its good properties, there seems to be many different ways to implement/formalize OTT.
-[1](#ref-1) [2](#ref-2) [3](#ref-3) and an existing implementation [8](#ref-8) all use different approaches:
+[[1]](#ref-1) [[2]](#ref-2) [[3]](#ref-3) and an existing implementation [[8]](#ref-8) all use different approaches:
 
-- In [1](#ref-1), observational equalities are built using builtin constructors.
+- In [[1]](#ref-1), observational equalities are built using builtin constructors.
 This requires a set of primitive constructors for every type former.
 
-- In [2](#ref-2), the equality type *computes* to the type of its proof/witness.
+- In [[2]](#ref-2), the equality type *computes* to the type of its proof/witness.
 But I am afraid that this will make type checking difficult:
 the endpoints of an equality type is hard to retrieve after it computes to something else.
 
-The type system in [2](#ref-2) uses a separate (definitionally) proof-irrelevant
+The type system in [[2]](#ref-2) uses a separate (definitionally) proof-irrelevant
 proposition fragment to support (definitional) UIP.
 
-[2](#ref-2) also stresses the issue of regularity.
+[[2]](#ref-2) also stresses the issue of regularity.
 Without regularity, elimination of inductive types may have undesirable computational behavior.
 The authors propose adding a regularity rule to overcome this problem,
-implementation may be similar to [4](#ref-4)
+implementation may be similar to [[4]](#ref-4)
 
 
-- [3](#ref-3) also adapts the "equality type computes to proof" approach
-and definitional irrelevance in [2](#ref-2).
-However, while both [1](#ref-1) and [2](#ref-2) uses an heterogenous equality,
-[3](#ref-3) features homogeneous equality.
+- [[3]](#ref-3) also adapts the "equality type computes to proof" approach
+and definitional irrelevance in [[2]](#ref-2).
+However, while both [[1]](#ref-1) and [[2]](#ref-2) uses an heterogenous equality,
+[[3]](#ref-3) features homogeneous equality.
 It also supports *propositional* regularity.
 But I am worried that this may cause some kind of coercion hell.
 
-- [8](#ref-8) is the only implementation I found for OTT online.
+- [[8]](#ref-8) is the only implementation I found for OTT online.
 It features quotient type, normalization-by-evaluation and regularity.
 The NBE algorithm erases all equality proofs,
 which is good computationally,
@@ -88,7 +88,7 @@ and are definitionally proof irrelevant
 - *no* primitive equality constructors,
 all necessary operations on equalities are supported via *axioms*
 - so long as all axioms are irrelevant, canonicity would be safe
-- support definitional regularity, following the approach in [4](#ref-4)
+- support definitional regularity, following the approach in [[4]](#ref-4)
 - equality proofs are not erased,
 but perhaps wrapped in lazy thunks to avoid unnecessary computation
 
@@ -101,7 +101,7 @@ but perhaps wrapped in lazy thunks to avoid unnecessary computation
 Currently, the implementation uses type-in-type for ease of implementation and testing.
 But in the future,
 I plan to implement universe hierarchy
-following the proposal of Conor McBride [9](#ref-9) [10](#ref-10).
+following the proposal of Conor McBride [[9]](#ref-9) [[10]](#ref-10).
 In this style of universe hierarchy:
 
 - viewing a small type from a larger universe is done implicitly
