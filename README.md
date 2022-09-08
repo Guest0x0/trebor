@@ -29,9 +29,10 @@ AFAIK, OTT is currently the most promising approach to extensional equality prin
 |-------------|--------|-----|------------|-----------------|------------------------|
 | ITT         | no     | no  | yes        | yes             | yes                    |
 | ITT + axiom | yes    | yes | no         | yes             | yes                    |
-| ITT + irr.  | no     | yes | yes        | yes?<sup>2</sup>| yes                    |
+| ITT + irr.  | no     | yes | yes        | yes<sup>2</sup> | yes                    |
 | ETT         | yes    | yes | yes        | no<sup>3</sup>  | yes                    |
-| HoTT/Cubical| yes    | no  | yes        | yes (no NBE yet)| yes/difficult          |
+| HoTT        | yes    | no  | no         | yes             | yes                    |
+| Cubical TT  | yes    | no  | yes        | yes (no NBE yet)| no/difficult           |
 | OTT         | yes    | yes | yes        | yes             | possible (see [[2]](#ref-2))|
 
 1: whether eliminating `refl` computes to the identity.
