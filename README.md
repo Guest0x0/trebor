@@ -8,11 +8,11 @@ to implement some full-scale type checker/dependently typed language.
 
 ## Feature Overview
 
-- [Observational Equality](#sect-ott)
-- (WIP) [Universe Polymorphism a là Conor McBride](#sect-mbuniv)
+- [Observational Equality](#Observational-Equality)
+- (WIP) [Universe Polymorphism a là Conor McBride](#Universe-Polymorphism)
 
 
-## Observation Equality
+## Observational Equality
 
 ![](pohai/trebor-on-set-theory.png)
 
@@ -93,10 +93,11 @@ all necessary operations on equalities are supported via *axioms*
 - equality proofs are not erased,
 but perhaps wrapped in lazy thunks to avoid unnecessary computation
 
-
-## Universe Polymorphism (WIP)
+## Universe Polymorphism
 
 ![](pohai/trebor-on-univ-poly.png)
+
+> WIP
 
 Currently, the implementation uses type-in-type for ease of implementation and testing.
 But in the future,
@@ -143,7 +144,7 @@ Equality, Quasi-Implicit Products, and Large Eliminations
 <a id="ref-8" href="https://github.com/bobatkey/sott">[8]</a>
 <https://github.com/bobatkey/sott>
 
-<a id="ref-9", href="https://personal.cis.strath.ac.uk/conor.mcbride/Crude.pdf">[9]</a>
+<a id="ref-9" href="https://personal.cis.strath.ac.uk/conor.mcbride/Crude.pdf">[9]</a>
 <https://personal.cis.strath.ac.uk/conor.mcbride/Crude.pdf>
 
 <a id="ref-10" href="https://pigworker.wordpress.com/2015/01/09/universe-hierarchies/">[10]</a>
