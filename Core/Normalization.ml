@@ -97,7 +97,7 @@ and value_coe target eq lhs rhs =
 
     | V_TyFun(param_typ1, ret_typ1), V_TyFun(param_typ2, ret_typ2) ->
         let param_eq = lazy(app_axiom "eq-symm" [
-                app_axiom "fun-arg-injective"
+                app_axiom "fun-param-injective"
                     [ param_typ1; param_typ2
                     ; V_Fun(ret_typ1); V_Fun(ret_typ2)
                     ; Lazy.force eq ]])

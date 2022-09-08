@@ -1,7 +1,7 @@
 
 (library
  (name core)
- (modules Syntax Normalization Typecheck Parser Lexer))
+ (modules Syntax Normalization Typecheck Parser Lexer Prelude))
 
 (test
  (name CoreTest)

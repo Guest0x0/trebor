@@ -5,10 +5,7 @@ let parse_lexbuf lexbuf = Parser.program Lexer.token lexbuf
 let parse_string src    = parse_lexbuf (Lexing.from_string src)
 
 
-let globals = Hashtbl.create 37
-let _ = Hashtbl.add_seq globals
-        (List.to_seq Typecheck.prelude
-         |> Seq.map (fun (name, typ) -> (name, Normalization.V_Axiom typ)))
+let globals = Prelude.make_globals 37
 
 
 let _ = Typecheck.process_program globals @@ parse_string "

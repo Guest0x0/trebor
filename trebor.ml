@@ -1,10 +1,7 @@
 
 open Core
 
-let globals = Hashtbl.create 37
-let _ = Hashtbl.add_seq globals
-        (List.to_seq Typecheck.prelude
-         |> Seq.map (fun (name, typ) -> name, Normalization.V_Axiom typ))
+let globals = Prelude.make_globals 37
 
 let _ =
     let file = Sys.argv.(1) in
