@@ -213,3 +213,99 @@ and quote_neutral globals level env neutral =
         in
         let c_target = quote_value globals level env lhs target in
         C_Coe { target = c_target; eq = c_eq; lhs = c_lhs; rhs = c_rhs }, rhs
+
+
+
+exception Not_Equal
+
+let rec value_equal globals level env typ value1 value2 =
+    match typ, value1, value2 with
+    | V_Type _, _, _ ->
+        ignore (typ_equal globals level env value1 value2)
+    | V_TyFun(a, b), _, _ ->
+        let var_v = V_Ne(N_Level level) in
+        value_equal globals (level + 1) (a :: env) (b var_v)
+            (value_apply value1 var_v) (value_apply value2 var_v)
+    | V_TyPair(a, b), _, _ ->
+        let fst1_v = value_proj value1 `Fst in
+        let fst2_v = value_proj value2 `Fst in
+        let _ = value_equal globals level env a fst1_v fst2_v in
+        value_equal globals level env (b fst1_v)
+            (value_proj value1 `Snd) (value_proj value2 `Snd)
+    | V_TyEq _, _, _ ->
+        ()
+    | V_Ne _, V_Ne neutral1, V_Ne neutral2 ->
+        ignore (neutral_equal globals level env neutral1 neutral2)
+    | _ ->
+        raise Not_Equal
+
+and neutral_equal globals level env ne1 ne2 =
+    match ne1, ne2 with
+    | N_Level l1, N_Level l2 when l1 = l2 ->
+        List.nth env (level - l1 - 1)
+    | N_Axiom a1, N_Axiom a2 when a1 = a2 ->
+        let (V_Axiom typ | V_Def(_, typ)) = Hashtbl.find globals a1 in
+        typ
+    | N_App(f1, arg1), N_App(f2, arg2) ->
+        begin match neutral_equal globals level env f1 f2 with
+        | V_TyFun(a, b) ->
+            let () = value_equal globals level env a arg1 arg2 in
+            b arg1
+        | _ ->
+            failwith "Core.Normalization.runtime_error"
+        end
+    | N_Proj(pair1, field1), N_Proj(pair2, field2) when field1 = field2 ->
+        begin match neutral_equal globals level env pair1 pair2, field1 with
+        | V_TyPair(a, b), `Fst -> a
+        | V_TyPair(a, b), `Snd -> b @@ V_Ne(N_Proj(pair1, `Fst))
+        | _                    -> failwith "Core.Normalization.runtime_error"
+        end
+    | N_Coe coe1, N_Coe coe2 ->
+        let _ = typ_equal globals level env coe1.lhs coe2.lhs in
+        let _ = typ_equal globals level env coe1.rhs coe2.rhs in
+        let _ = value_equal globals level env coe1.lhs coe1.target coe2.target in
+        coe1.rhs
+    | _ ->
+        raise Not_Equal
+
+and typ_equal globals level env value1 value2 =
+    match value1, value2 with
+    | V_Type ul_a, V_Type ul_b when ul_a = ul_b ->
+        ul_a + 1
+
+    | V_TyFun(a1, b1) , V_TyFun(a2, b2)
+    | V_TyPair(a1, b1), V_TyPair(a2, b2) ->
+        let ul_a = typ_equal globals level env a1 a2 in
+        let var_v = V_Ne(N_Level level) in
+        let ul_b = typ_equal globals (level + 1) (a1 :: env) (b1 var_v) (b2 var_v) in
+        max ul_a ul_b
+
+    | V_TyEq((lhs1, lhs_typ1), (rhs1, rhs_typ1))
+    , V_TyEq((lhs2, lhs_typ2), (rhs2, rhs_typ2)) ->
+        let ul_lhs = typ_equal globals level env lhs_typ1 lhs_typ2 in
+        let ul_rhs = typ_equal globals level env rhs_typ1 rhs_typ2 in
+        let () = value_equal globals level env lhs_typ1 lhs1 lhs2 in
+        let () = value_equal globals level env rhs_typ1 rhs1 rhs2 in
+        max ul_lhs ul_rhs
+
+    | V_Ne neutral1, V_Ne neutral2 ->
+        begin match neutral_equal globals level env neutral1 neutral2 with
+        | V_Type ul -> ul
+        | _         -> failwith "Core.Normalization.runtime_error"
+        end
+    | _ ->
+        raise Not_Equal
+
+
+
+let value_equal globals level env typ value1 value2 =
+    try let _ = value_equal globals level env typ value1 value2 in true
+    with Not_Equal -> false
+
+let neutral_equal globals level env ne1 ne2 =
+    try let _ = neutral_equal globals level env ne1 ne2 in true
+    with Not_Equal -> false
+
+let typ_equal globals level env value1 value2 =
+    try let _ = typ_equal globals level env value1 value2 in true
+    with Not_Equal -> false

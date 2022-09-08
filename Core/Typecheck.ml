@@ -126,9 +126,8 @@ and check globals ctx typ expr =
         begin match param_ann with
         | Some ann ->
             let _, c_ann = check_typ globals ctx ann in
-            let param_ty_nf , _ = quote_typ globals ctx.level ctx.typs param_ty in
-            let param_ann_nf, _ = quote_typ globals ctx.level ctx.typs (eval globals ctx.values c_ann) in
-            if param_ty_nf <> param_ann_nf then
+            let ann_typ = eval globals ctx.values c_ann in
+            if not @@ typ_equal globals ctx.level ctx.typs param_ty ann_typ then
                 failwith "type error: parameter annotation mismatch"
         | None ->
             ()
@@ -143,9 +142,7 @@ and check globals ctx typ expr =
         C_Pair(c_fst, c_snd)
     | _ ->
         let typ', c_expr = infer globals ctx expr in
-        let typ_nf , _ = quote_typ globals ctx.level ctx.typs typ in
-        let typ_nf', _ = quote_typ globals ctx.level ctx.typs typ' in
-        if typ_nf <> typ_nf' then
+        if not @@ typ_equal globals ctx.level ctx.typs typ typ' then
             failwith "type error: type mismatch";
         c_expr
 
