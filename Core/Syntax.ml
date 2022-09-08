@@ -17,7 +17,7 @@ type core =
 
     | C_TyEq of (core * core) * (core * core)
     | C_Coe  of
-          { origin : core
+          { target : core
           ; eq     : core Lazy.t
           ; lhs    : core
           ; rhs    : core }
