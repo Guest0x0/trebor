@@ -5,6 +5,7 @@ to implement some full-scale type checker/dependently typed language.
 
 ![](pohai/trebor-dont-want-to-impl-typechecker.png)
 ![](pohai/trebor-dont-want-to-impl-typechecker2.png)
+![](pohai/trebor-dont-want-to-impl-typechecker3.png)
 
 ## Feature Overview
 
