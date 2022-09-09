@@ -183,7 +183,21 @@ and check_typ globals ctx expr =
 
 
 
-let process_top_level globals top =
+let rec check_context globals ctx_expr =
+    match ctx_expr with
+    | [] ->
+        [], empty_ctx
+    | (name, typ_expr) :: ctx_expr' ->
+        let c_ctx, ctx = check_context globals ctx_expr' in
+        let _, c_typ = check_typ globals ctx typ_expr in
+        ( (name, c_typ) :: c_ctx
+        , add_local name (eval globals ctx.values c_typ) ctx )
+
+
+
+
+
+let check_top_level globals top =
     match top with
     | AxiomDecl(name, typ) ->
         begin match Hashtbl.find_opt globals name with
@@ -204,8 +218,9 @@ let process_top_level globals top =
         C_Definition(name, c_def, fst @@ quote_typ globals 0 [] typ)
 
 
-let rec process_program globals = function
+
+let rec check_program globals = function
     | []          -> []
     | top :: tops ->
-        let c_top = process_top_level globals top in
-        c_top :: process_program globals tops
+        let c_top = check_top_level globals top in
+        c_top :: check_program globals tops

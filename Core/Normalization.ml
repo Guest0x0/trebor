@@ -141,6 +141,16 @@ and value_coe target eq lhs rhs =
 
 
 
+let rec eval_context globals ctx =
+    match ctx with
+    | [] ->
+        []
+    | (_, typ) :: ctx' ->
+        let env = eval_context globals ctx' in
+        eval globals env typ :: env
+
+
+
 
 let rec quote_value globals level env typ v =
     match typ, v with
@@ -300,6 +310,18 @@ and typ_equal globals level env value1 value2 =
 
 
 
+let rec context_equal globals ctx1 ctx2 =
+    match ctx1, ctx2 with
+    | [], [] ->
+        0, []
+    | typ1 :: ctx1', typ2 :: ctx2' ->
+        let level, typs = context_equal globals ctx1' ctx2' in
+        let _ = typ_equal globals level typs typ1 typ2 in
+        (level + 1, typ1 :: typs)
+    | _ ->
+        raise Not_Equal
+
+
 let value_equal globals level env typ value1 value2 =
     try let _ = value_equal globals level env typ value1 value2 in true
     with Not_Equal -> false
@@ -310,4 +332,8 @@ let neutral_equal globals level env ne1 ne2 =
 
 let typ_equal globals level env value1 value2 =
     try let _ = typ_equal globals level env value1 value2 in true
+    with Not_Equal -> false
+
+let context_equal globals ctx1 ctx2 =
+    try let _ = context_equal globals ctx1 ctx2 in true
     with Not_Equal -> false

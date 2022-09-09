@@ -47,5 +47,5 @@ let prelude_program = Parser.program Lexer.token (Lexing.from_string prelude_src
 
 let make_globals size =
     let globals = Hashtbl.create (size + List.length prelude_program) in
-    List.iter (fun top -> ignore @@ Typecheck.process_top_level globals top) prelude_program;
+    List.iter (fun top -> ignore @@ Typecheck.check_top_level globals top) prelude_program;
     globals
