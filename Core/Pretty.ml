@@ -92,14 +92,14 @@ and pp_core_tyfun ctx fmt ((name, a), b) =
     fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
     match b with
     | C_TyFun(a', b') -> fprintf fmt "@ %a" (pp_core_tyfun ctx') (a', b')
-    | _               -> fprintf fmt "->@ %a" (pp_core ctx') b
+    | _               -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
 and pp_core_typair ctx fmt ((name, a), b) =
     let name, ctx' = add_var name ctx in
     fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
     match b with
-    | C_TyPair(a', b') -> fprintf fmt "@ %a" (pp_core_tyfun ctx') (a', b')
-    | _                -> fprintf fmt "->@ %a" (pp_core ctx') b
+    | C_TyPair(a', b') -> fprintf fmt "@ %a" (pp_core_typair ctx') (a', b')
+    | _                -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
 and pp_core_fun ctx fmt (name, body) =
     let name, ctx' = add_var name ctx in
