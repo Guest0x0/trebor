@@ -36,14 +36,13 @@ let error msg = raise (SyntaxError(cur_span (), msg))
 %right    TOK_COMMA
 %nonassoc TOK_EQ
 %left     TOK_COLON TOK_COLON_GT
-%left     APP
 
 
-%type<Syntax.expr> expr
-%start expr
+%type<Syntax.expr> single_expr
+%start single_expr
 
-%type<Syntax.top_level> top_level
-%start top_level
+%type<Syntax.top_level> single_top_level
+%start single_top_level
 
 %type<Syntax.top_level list> program
 %start program
@@ -56,21 +55,33 @@ program :
 ;
 
 
+single_top_level :
+    | top_level TOK_EOF { $1 }
+;
+
+
+single_expr :
+    | expr TOK_EOF { $1 }
+;
+
+
 top_level :
     | TOK_KW_LET TOK_NAME TOK_COLON expr { AxiomDecl ($2, $4) }
     | TOK_KW_LET TOK_NAME TOK_EQ    expr { Definition($2, $4) }
     | error                              { error "expecting top level clause" }
 ;
 
-
-expr :
-    | binary_op_expr
+expr:
+    | app_expr
         { $1 }
+
+    | expr TOK_COLON expr
+        { mk_expr @@ E_Ann($1, $3) }
 
     | TOK_KW_FORALL param_list TOK_MINUS_GT expr
         { List.fold_right (fun param body -> mk_expr @@ E_TyFun(param, body)) $2 $4 }
 
-    | binary_op_expr TOK_MINUS_GT expr
+    | expr TOK_MINUS_GT expr
         { mk_expr @@ E_TyFun(("", $1), $3) }
 
     | TOK_KW_FUN param_list_opt_ann TOK_MINUS_GT expr
@@ -79,26 +90,17 @@ expr :
     | TOK_KW_EXISTS param_list TOK_MINUS_GT expr
         { List.fold_right (fun param body -> mk_expr @@ E_TyPair(param, body)) $2 $4 }
 
-    | error
-        { error "expecting expression" }
-;
-
-binary_op_expr:
-    | app_expr
-        { $1 }
-
-    | binary_op_expr TOK_COLON binary_op_expr
-        { mk_expr @@ E_Ann($1, $3) }
-
-    | binary_op_expr TOK_COMMA binary_op_expr
+    | expr TOK_COMMA expr
         { mk_expr @@ E_Pair($1, $3) }
 
-    | binary_op_expr TOK_EQ binary_op_expr
+    | expr TOK_EQ expr
         { mk_expr @@ E_TyEq($1, $3) }
 
-    | binary_op_expr TOK_COLON_GT binary_op_expr
+    | expr TOK_COLON_GT expr
         { mk_expr @@ E_Coe($1, $3) }
 
+    | error
+        { error "expecting expression" }
 ;
 
 app_expr:

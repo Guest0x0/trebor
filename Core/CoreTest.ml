@@ -11,7 +11,7 @@ let parse_string ?filename src =
 
 let expr_of_string src =
     let lexbuf = Lexing.from_string src in
-    Parser.expr Lexer.token lexbuf
+    Parser.single_expr Lexer.token lexbuf
 
 let core_of_string globals ctx src =
     let _, core = Typecheck.check_typ globals ctx (expr_of_string src) in
