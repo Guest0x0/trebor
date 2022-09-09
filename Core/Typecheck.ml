@@ -72,8 +72,11 @@ let rec infer globals ctx expr =
         typv, cexpr'
 
     | E_Type ulevel ->
-        (* V_Type(ulevel + 1), C_Type ulevel *)
-        V_Type ulevel, C_Type ulevel
+        V_Type(ulevel + 1), C_Type ulevel
+
+    | E_Shift(shift, expr') ->
+        let typ, core = infer globals ctx expr' in
+        value_shift shift typ, C_Shift(shift, core)
 
     | E_TyFun((name, a), b) ->
         let ul_a, ca = check_typ globals ctx a in

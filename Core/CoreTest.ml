@@ -256,6 +256,29 @@ let bad = fun A (a : A) -> a
 " ;;
 
 
+register_test "universe.shift.basic" None "
+let type-of-id : Type 1
+let type-of-id = forall (A : Type) -> A -> A
+
+let id : type-of-id
+let id = fun A a -> a
+
+let id-id = ~id type-of-id id
+" ;;
+
+register_test "universe.shift.relevant-arg" None "
+let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
+let eq : ~f (Type 2) (fun x -> x) = Type 1
+let eq = ~~~eq-refl (Type 2) (Type 1)
+" ;;
+
+register_test "universe.shift.irrelevant-arg" None "
+let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
+let eq : ~f (Type 2) (fun x -> Type 1) = Type 1
+let eq = ~~~eq-refl (Type 2) (Type 1)
+" ;;
+
+
 
 register_test "examples.eta.fun" None "
 let fun-eta : forall (A : Type 0) (B : A -> Type 0) ->
@@ -286,10 +309,10 @@ let ap = fun A B a1 a2 f eq ->
 let fun-type-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     A1 = A2 -> B1 = B2 -> (forall (a1 : A1) -> B1 a1) = (forall (a2 : A2) -> B2 a2)
 let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
-    ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
+    ~ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
         (A1, B1) (A2, B2)
         (fun family -> forall (a : family.1) -> family.2 a)
-        (pairext
+        (~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)
@@ -299,10 +322,10 @@ let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
 let pair-type-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     A1 = A2 -> B1 = B2 -> (exists (a1 : A1) -> B1 a1) = (exists (a2 : A2) -> B2 a2)
 let pair-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
-    ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
+    ~ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
         (A1, B1) (A2, B2)
         (fun family -> exists (a : family.1) -> family.2 a)
-        (pairext
+        (~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)
@@ -318,7 +341,7 @@ let type-of-bad = forall (A : Type 0) -> A = (A -> A) -> A
 
 let bad : type-of-bad
 let bad = fun A eq ->
-    omega A eq (omega A eq :> eq-symm (Type 0) (Type 0) A (A -> A) eq)
+    omega A eq (omega A eq :> ~eq-symm (Type 0) (Type 0) A (A -> A) eq)
 " ;;
 
 

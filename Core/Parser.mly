@@ -20,9 +20,10 @@ let error msg = raise (SyntaxError(cur_span (), msg))
 
 %token TOK_EOF
 %token TOK_LPAREN TOK_RPAREN TOK_LBRACK TOK_RBRACK TOK_LBRACE TOK_RBRACE
-%token TOK_EQ
+%token TOK_TILDE
 %token TOK_MINUS_GT TOK_EQ_GT
 %token TOK_COMMA TOK_DOT
+%token TOK_EQ
 %token TOK_COLON TOK_COLON_GT
 
 %token<string> TOK_NAME
@@ -36,6 +37,8 @@ let error msg = raise (SyntaxError(cur_span (), msg))
 %right    TOK_COMMA
 %nonassoc TOK_EQ
 %left     TOK_COLON TOK_COLON_GT
+%left     TOK_TILDE
+%left     TOK_DOT
 
 
 %type<Syntax.expr> single_expr
@@ -115,17 +118,23 @@ atom_expr :
     | TOK_NAME
         { mk_expr @@ E_Var $1 }
 
+    | TOK_KW_TYPE
+        { mk_expr @@ E_Type 0 }
+
     | TOK_KW_TYPE TOK_INT
         { mk_expr @@ E_Type $2 }
 
-    | TOK_LPAREN expr TOK_RPAREN
-        { $2 }
+    | TOK_TILDE atom_expr
+        { mk_expr @@ E_Shift(1, $2) }
 
     | atom_expr TOK_DOT TOK_INT
         { match $3 with
           | 1 -> mk_expr @@ E_Proj($1, `Fst)
           | 2 -> mk_expr @@ E_Proj($1, `Snd)
           | _ -> failwith "invalid field of pair" }
+
+    | TOK_LPAREN expr TOK_RPAREN
+        { $2 }
 ;
 
 

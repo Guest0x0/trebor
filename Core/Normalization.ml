@@ -5,7 +5,7 @@ open Syntax
 type value =
     | V_Ne of neutral
 
-    | V_Type  of int
+    | V_Type    of int
 
     | V_TyFun of (string * value) * (value -> value)
     | V_Fun   of string * (value -> value)
@@ -16,11 +16,11 @@ type value =
     | V_TyEq  of (value * value) * (value * value)
 
 and neutral =
-    | N_Axiom of string
-    | N_Level of int
-    | N_App   of neutral * value
-    | N_Proj  of neutral * [`Fst | `Snd]
-    | N_Coe   of
+    | N_Axiom   of int * string
+    | N_Level   of int
+    | N_App     of neutral * value
+    | N_Proj    of neutral * [`Fst | `Snd]
+    | N_Coe     of
           { target : value
           ; eq     : value Lazy.t
           ; lhs    : value
@@ -33,21 +33,22 @@ type top_level_value =
 
 
 
-let app_axiom axiom args =
-    V_Ne(List.fold_left (fun f arg -> N_App(f, arg)) (N_Axiom axiom) args)
+let app_axiom axiom ?(shift=0) args =
+    V_Ne(List.fold_left (fun f arg -> N_App(f, arg)) (N_Axiom(0, axiom)) args)
 
 
 let rec eval globals env core =
     match core with
     | C_TopVar v ->
         begin match Hashtbl.find globals v with
-        | V_Axiom _     -> V_Ne(N_Axiom v)
+        | V_Axiom _     -> V_Ne(N_Axiom(0, v))
         | V_Def(def, _) -> def
         end
 
     | C_Local i -> List.nth env i
 
-    | C_Type ulevel -> V_Type ulevel
+    | C_Type ulevel     -> V_Type ulevel
+    | C_Shift(d, core') -> value_shift d (eval globals env core')
 
     | C_TyFun((name, param_typ), ret_typ) ->
         V_TyFun( (name, eval globals env param_typ)
@@ -75,6 +76,37 @@ let rec eval globals env core =
     | C_Coe { target; eq; lhs; rhs } ->
         value_coe (eval globals env target) (lazy (eval globals env (Lazy.force eq)))
             (eval globals env lhs) (eval globals env rhs)
+
+
+and value_shift d v =
+    match v with
+    | V_Ne ne   -> V_Ne(neutral_shift d ne)
+    | V_Type ul -> V_Type(ul + d)
+
+    | V_TyFun((name, a), b) -> V_TyFun( (name, value_shift d a)
+                                      , fun v -> value_shift d (b @@ value_shift (-d) v))
+    | V_Fun(name, f)        -> V_Fun(name, fun v -> value_shift d (f @@ value_shift (-d) v))
+
+    | V_TyPair((name, a), b) -> V_TyPair( (name, value_shift d a)
+                                        , fun v -> value_shift d (b @@ value_shift (-d) v))
+    | V_Pair(fst, snd)       -> V_Pair(value_shift d fst, value_shift d snd)
+
+    | V_TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
+        V_TyEq( (value_shift d lhs, value_shift d lhs_typ)
+              , (value_shift d rhs, value_shift d rhs_typ) )
+
+and neutral_shift d ne =
+    match ne with
+    | N_Axiom(shift, axiom) -> N_Axiom(shift + d, axiom)
+    | N_Level _             -> ne
+    | N_App(f, a)           -> N_App(neutral_shift d f, value_shift d a)
+    | N_Proj(pair, field)   -> N_Proj(neutral_shift d pair, field)
+    | N_Coe { target; eq; lhs; rhs } ->
+        N_Coe { target = value_shift d target
+              ; eq     = lazy(value_shift d @@ Lazy.force eq)
+              ; lhs    = value_shift d lhs
+              ; rhs    = value_shift d rhs }
+
 
 and value_apply func_v arg_v =
     match func_v with
@@ -202,9 +234,9 @@ and quote_neutral globals level env neutral =
     | N_Level lvl ->
         let idx = level - lvl - 1 in
         C_Local idx, List.nth env idx
-    | N_Axiom a ->
+    | N_Axiom(shift, a) ->
         let (V_Axiom typ | V_Def(_, typ)) = Hashtbl.find globals a in
-        C_TopVar a, typ
+        C_Shift(shift ,C_TopVar a), value_shift shift typ
     | N_App(ne_f, v_arg) ->
         begin match quote_neutral globals level env ne_f with
         | f, V_TyFun((_, a), b) -> C_App(f, quote_value globals level env a v_arg), b v_arg
@@ -255,7 +287,7 @@ and neutral_equal globals level env ne1 ne2 =
     match ne1, ne2 with
     | N_Level l1, N_Level l2 when l1 = l2 ->
         List.nth env (level - l1 - 1)
-    | N_Axiom a1, N_Axiom a2 when a1 = a2 ->
+    | N_Axiom(shift1, a1), N_Axiom(shift2, a2) when shift1 = shift2 && a1 = a2 ->
         let (V_Axiom typ | V_Def(_, typ)) = Hashtbl.find globals a1 in
         typ
     | N_App(f1, arg1), N_App(f2, arg2) ->

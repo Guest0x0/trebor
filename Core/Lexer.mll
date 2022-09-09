@@ -30,12 +30,13 @@ rule token = parse
     | ']'     { TOK_RBRACK }
     | '{'     { TOK_LBRACE }
     | '}'     { TOK_RBRACE }
-    | '='     { TOK_EQ }
+    | '~'     { TOK_TILDE }
     | "->"    { TOK_MINUS_GT }
     | "=>"    { TOK_EQ_GT }
     | ','     { TOK_COMMA }
     | '.'     { TOK_DOT }
     | ':'     { TOK_COLON }
+    | '='     { TOK_EQ }
     | ":>"    { TOK_COLON_GT }
     | dex_digit+
         { TOK_INT(int_of_string (Lexing.lexeme lexbuf)) }
