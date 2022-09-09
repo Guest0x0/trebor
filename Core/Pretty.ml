@@ -19,7 +19,7 @@ type pp_context =
 
 let add_var name ctx =
     let name =
-        if List.mem name ctx.names
+        if name = "" || List.mem name ctx.names
         then "$" ^ string_of_int ctx.level
         else name
     in
@@ -48,7 +48,7 @@ let rec pp_core ctx fmt core =
             (pp_core_fun { ctx with prec = prec_binder }) (name, body)
 
     | C_App(f, a) when ctx.prec <= prec_app ->
-        fprintf fmt "@[<hov2>%a@]" (pp_core_app ctx) (f, a)
+        fprintf fmt "@[<hov2>%a@]" (pp_core_app { ctx with prec = prec_app }) (f, a)
 
     | C_TyPair(a, b) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>exists %a@]"
@@ -106,7 +106,7 @@ and pp_core_fun ctx fmt (name, body) =
     fprintf fmt "%s" name; 
     match body with
     | C_Fun(name', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', body')
-    | _           -> fprintf fmt "->@ %a" (pp_core ctx') body
+    | _           -> fprintf fmt " ->@ %a" (pp_core ctx') body
 
 
 and pp_core_pair ctx fmt (fst, snd) =
@@ -139,6 +139,20 @@ let pp_core_top_level verbose fmt top =
             name (pp_core ~verbose []) def
 
 
+let pp_context verbose fmt ctx =
+    let rec loop = function
+        | [] ->
+            []
+        | (name, typ) :: ctx' ->
+            let names = loop ctx' in
+            if names <> [] then
+                fprintf fmt "@ ";
+            fprintf fmt "%s : %a" name (pp_core ~verbose names) typ;
+            name :: names
+    in
+    ignore (loop ctx)
+
+
 let pp_span fmt span =
     fprintf fmt "[%d:%d to %d:%d, %s]"
         span.lhs.pos_lnum (span.lhs.pos_cnum - span.lhs.pos_bol)
@@ -151,13 +165,15 @@ let pp_error fmt err =
     | UnboundVar name -> fprintf fmt "unbound variable %s" name
     | CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
     | WrongType(ctx, typ, expected) ->
-        fprintf fmt "@[<v>expected: %s@ found: %a@]"
-            expected (pp_core @@ List.map fst ctx) typ
+        fprintf fmt "@[<v>expected: %s@ found: %a@ "
+            expected (pp_core @@ List.map fst ctx) typ;
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context false) ctx
     | TypeMismatch(ctx, expected, actual, err_ctx) ->
         let names = List.map fst ctx in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
         fprintf fmt "expected: %a@ " (pp_core names) expected;
-        fprintf fmt "received: %a@]" (pp_core names) actual
+        fprintf fmt "received: %a@ " (pp_core names) actual;
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context false) ctx
 
 
 let pp_exception fmt exn =
