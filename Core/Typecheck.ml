@@ -21,7 +21,7 @@ let empty_ctx =
 let add_local name typ ctx =
     { level  = ctx.level + 1
     ; values = V_Ne(N_Level ctx.level) :: ctx.values
-    ; typs   = typ :: ctx.typs
+   ; typs   = typ :: ctx.typs
     ; locals = (name, typ) :: ctx.locals }
 
 
@@ -155,7 +155,24 @@ let rec infer globals ctx expr =
 
 and check err_ctx globals ctx typ expr =
     match typ, expr.shape with
-    | V_TyFun((_, param_ty), ret_ty), E_Fun((name, None), body) ->
+    | V_TyFun((_, param_ty), ret_ty), E_Fun((name, ann), body) ->
+        let param_ty =
+            match ann with
+            | Some ann ->
+                let _, c_ann = check_typ globals ctx ann in
+                let v_ann = eval globals ctx.values c_ann in
+                if subtyp globals ctx.level ctx.typs v_ann param_ty
+                then v_ann
+                else raise @@ TypeError(
+                        ann.span,
+                        TypeMismatch( quote_locals globals ctx
+                                    , fst @@ quote_typ globals ctx.level ctx.typs param_ty
+                                    , fst @@ quote_typ globals ctx.level ctx.typs v_ann
+                                    , "function annotation" )
+                    )
+            | None ->
+                param_ty
+        in
         let ret_ty' = ret_ty @@ V_Ne(N_Level ctx.level) in
         let c_body = check err_ctx globals (add_local name param_ty ctx) ret_ty' body in
         C_Fun(name, c_body)
@@ -166,7 +183,7 @@ and check err_ctx globals ctx typ expr =
         C_Pair(c_fst, c_snd)
     | _ ->
         let typ', c_expr = infer globals ctx expr in
-        if not @@ typ_equal globals ctx.level ctx.typs typ typ' then begin
+        if not @@ subtyp globals ctx.level ctx.typs typ' typ then begin
             let expected, _ = quote_typ globals ctx.level ctx.typs typ in
             let received, _ = quote_typ globals ctx.level ctx.typs typ' in
             raise @@ TypeError(

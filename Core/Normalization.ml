@@ -342,6 +342,7 @@ and typ_equal globals level env value1 value2 =
 
 
 
+
 let rec context_equal globals ctx1 ctx2 =
     match ctx1, ctx2 with
     | [], [] ->
@@ -369,3 +370,20 @@ let typ_equal globals level env value1 value2 =
 let context_equal globals ctx1 ctx2 =
     try let _ = context_equal globals ctx1 ctx2 in true
     with Not_Equal -> false
+
+
+
+let rec subtyp globals level env sub sup =
+    match sub, sup with
+    | V_Type ul_sub, V_Type ul_sup ->
+        ul_sub <= ul_sup
+    | V_TyFun((_, a1), b1), V_TyFun((_, a2), b2) ->
+        subtyp globals level env a2 a1 &&
+        let var_v = V_Ne(N_Level level) in
+        subtyp globals (level + 1) (a2 :: env) (b1 var_v) (b2 var_v)
+    | V_TyPair((_, a1), b1), V_TyPair((_, a2), b2) ->
+        subtyp globals level env a1 a2 &&
+        let var_v = V_Ne(N_Level level) in
+        subtyp globals (level + 1) (a1 :: env) (b1 var_v) (b2 var_v)
+    | _ ->
+        typ_equal globals level env sub sup
