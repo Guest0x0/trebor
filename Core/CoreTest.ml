@@ -256,7 +256,22 @@ let bad = fun A (a : A) -> a
 " ;;
 
 
-register_test "universe.shift.basic" None "
+register_test "universe.subtyp" None "
+let A : Type 2
+let A = Type 0
+
+let Pi : forall (A : Type 0) -> Type 2
+let Pi = fun (A : Type 1) -> Type 0
+
+let Sigma : exists (A : Type 2) ->  Type 2
+let Sigma = (Type 0, Type 0)
+
+let Eq : (Type 0 : Type 2) = (Type 0 : Type 2)
+let Eq = ~~eq-refl (Type 1) (Type 0)
+" ;;
+
+
+register_test "universe.poly.basic" None "
 let type-of-id : Type 1
 let type-of-id = forall (A : Type) -> A -> A
 
@@ -266,13 +281,13 @@ let id = fun A a -> a
 let id-id = ~id type-of-id id
 " ;;
 
-register_test "universe.shift.relevant-arg" None "
+register_test "universe.poly.relevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> x) = Type 1
 let eq = ~~~eq-refl (Type 2) (Type 1)
 " ;;
 
-register_test "universe.shift.irrelevant-arg" None "
+register_test "universe.poly.irrelevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> Type 1) = Type 1
 let eq = ~~~eq-refl (Type 2) (Type 1)

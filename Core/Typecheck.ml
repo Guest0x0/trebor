@@ -161,7 +161,7 @@ and check err_ctx globals ctx typ expr =
             | Some ann ->
                 let _, c_ann = check_typ globals ctx ann in
                 let v_ann = eval globals ctx.values c_ann in
-                if subtyp globals ctx.level ctx.typs v_ann param_ty
+                if subtyp globals ctx.level ctx.typs param_ty v_ann 
                 then v_ann
                 else raise @@ TypeError(
                         ann.span,

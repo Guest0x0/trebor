@@ -385,5 +385,11 @@ let rec subtyp globals level env sub sup =
         subtyp globals level env a1 a2 &&
         let var_v = V_Ne(N_Level level) in
         subtyp globals (level + 1) (a1 :: env) (b1 var_v) (b2 var_v)
+    | V_TyEq((lhs1, lhs_typ1), (rhs1, rhs_typ1))
+    , V_TyEq((lhs2, lhs_typ2), (rhs2, rhs_typ2)) ->
+        subtyp globals level env lhs_typ1 lhs_typ2
+        && subtyp globals level env rhs_typ1 rhs_typ2
+        && value_equal globals level env lhs_typ2 lhs1 lhs2
+        && value_equal globals level env rhs_typ2 rhs1 rhs2
     | _ ->
         typ_equal globals level env sub sup
