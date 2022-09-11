@@ -184,19 +184,19 @@ let my-refl : forall (A : Type 0) (a : A) -> a = a
 let my-refl = fun A a -> eq-refl A a
 " ;;
 
-register_test "defeq.beta" None "
+register_test "defeq.fun.beta" None "
 let beta-id : forall (A : Type 0) (a : A) -> (fun (x : A) -> x) a = a
 let beta-id = fun A a -> eq-refl A a
 " ;;
 
-register_test "defeq.under-binder" None "
+register_test "defeq.fun.beta.under-binder" None "
 let danger : forall (A : Type 0) ->
     (fun (x : A) -> (fun (y : A) (x : A) -> y) x)
     = (fun (x : A) (y : A) -> x)
 let danger = fun A -> eq-refl (A -> A -> A) (fun (x : A) (y : A) -> x)
 " ;;
 
-register_test "defeq.under-binder-counter" (Some(
+register_test "defeq.fun.beta.under-binder-counter" (Some(
         type_mismatch ["A", "Type 0"]
             "(fun (x : A) -> (fun (y : A) (x : A) -> y) x) = (fun (x : A) (y : A) -> y)"
             "(fun (x : A) -> (fun (y : A) (x : A) -> y) x) = (fun (x : A) (y : A) -> x)"
@@ -207,6 +207,46 @@ let bad : forall (A : Type 0) ->
     = (fun (x : A) (y : A) -> y)
 let bad = fun A -> eq-refl (A -> A -> A) (fun (x : A) (y : A) -> x)
 " ;;
+
+
+register_test "defeq.fun.eta" None "
+let fun-eta : forall (A : Type 0) (B : A -> Type 0) ->
+    forall (f : forall (a : A) -> B a) -> f = (fun (a : A) -> f a)
+let fun-eta = fun A B f -> eq-refl (forall (a : A) -> B a) f
+" ;;
+
+
+
+register_test "defeq.pair.beta" None "
+let eq-fst : forall (A : Type) (B : A -> Type) (a : A) (b : B a) -> (a, b).1 = a
+let eq-fst = fun A B a b -> eq-refl A a
+
+let eq-snd : forall (A : Type) (B : A -> Type) (a : A) (b : B a) -> (a, b).2 = b
+let eq-snd = fun A B a b -> eq-refl (B a) b
+" ;;
+
+register_test "defeq.pair..eta" None "
+let pair-eta : forall (A : Type 0) (B : A -> Type 0) ->
+    forall (p : exists (a : A) -> B a) -> p = (p.1, p.2) : (exists (a : A) -> B a)
+let pair-eta = fun A B p -> eq-refl (exists (a : A) -> B a) p
+" ;;
+
+
+
+
+register_test "defeq.equality.UIP" None "
+let UIP : forall (A : Type 0) (B : Type 0) (a : A) (b : B) ->
+    forall (p : a = b) (q : a = b) -> p = q
+let UIP = fun A B a b p q -> eq-refl (a = b) p
+" ;;
+
+
+register_test "defeq.coe.type" None "
+let eq : forall (p : Type = Type) (A : Type) -> A :> p = A
+let eq = fun p A -> ~eq-refl Type A
+" ;;
+
+
 
 
 register_test "error.scope" (Some(UnboundVar "A")) "
@@ -294,25 +334,6 @@ let eq = ~~~eq-refl (Type 2) (Type 1)
 " ;;
 
 
-
-register_test "examples.eta.fun" None "
-let fun-eta : forall (A : Type 0) (B : A -> Type 0) ->
-    forall (f : forall (a : A) -> B a) -> f = (fun (a : A) -> f a)
-let fun-eta = fun A B f -> eq-refl (forall (a : A) -> B a) f
-" ;;
-
-register_test "examples.eta.pair" None "
-let pair-eta : forall (A : Type 0) (B : A -> Type 0) ->
-    forall (p : exists (a : A) -> B a) -> p = (p.1, p.2) : (exists (a : A) -> B a)
-let pair-eta = fun A B p -> eq-refl (exists (a : A) -> B a) p
-" ;;
-
-
-register_test "examples.UIP" None "
-let UIP : forall (A : Type 0) (B : Type 0) (a : A) (b : B) ->
-    forall (p : a = b) (q : a = b) -> p = q
-let UIP = fun A B a b p q -> eq-refl (a = b) p
-" ;;
 
 
 register_test "examples.type-formers-resp-eq" None "
