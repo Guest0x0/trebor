@@ -98,21 +98,20 @@ but perhaps wrapped in lazy thunks to avoid unnecessary computation
 
 ![](pohai/trebor-on-univ-poly.png)
 
-> WIP
-
-Currently, the implementation uses type-in-type for ease of implementation and testing.
-But in the future,
-I plan to implement universe hierarchy
-following the proposal of Conor McBride [[9]](#ref-9) [[10]](#ref-10).
+Universe hierarchy and polymorphism here
+follows the proposal of Conor McBride [[9]](#ref-9) [[10]](#ref-10).
 In this style of universe hierarchy:
 
 - viewing a small type from a larger universe is done implicitly
 via bidirectional type checking and subtyping
+
 - the universe level of a global definition is the smallest possible value ("build on the ground"),
 no level variables needed
+
 - *enlarging* a small type (i.e. "shift to higher", universe polymorphism)
-is done via a explicit operator.
+is done via a explicit operator `~`.
 The operator accumulates on global variables and is structural on all other term formers
+
 
 
 ## License
