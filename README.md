@@ -10,7 +10,7 @@ to implement some full-scale type checker/dependently typed language.
 ## Feature Overview
 
 - [Observational Equality](#Observational-Equality)
-- (WIP) [Universe Polymorphism a là Conor McBride](#Universe-Polymorphism)
+- [Universe Polymorphism a là Conor McBride](#Universe-Polymorphism)
 
 
 ## Observational Equality
