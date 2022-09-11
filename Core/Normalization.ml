@@ -44,6 +44,8 @@ let rec eval globals env core =
         | V_Axiom _     -> V_Ne(N_Axiom(0, v))
         | V_Def(def, _) -> def
         end
+    | C_Let((_, rhs), body) ->
+        eval globals (eval globals env rhs :: env) body
 
     | C_Local i -> List.nth env i
 

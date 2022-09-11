@@ -5,8 +5,9 @@ let keyword_table = Hashtbl.of_seq @@ List.to_seq
     [ "Type"  , TOK_KW_TYPE
     ; "forall", TOK_KW_FORALL
     ; "exists", TOK_KW_EXISTS
+    ; "fun"   , TOK_KW_FUN
     ; "let"   , TOK_KW_LET
-    ; "fun"   , TOK_KW_FUN ]
+    ; "in"    , TOK_KW_IN ]
 }
 
 let dex_digit = ['0'-'9']

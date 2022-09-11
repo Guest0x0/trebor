@@ -18,10 +18,15 @@ let empty_ctx =
     ; locals = [] }
 
 
-let add_local name typ ctx =
+let add_local name typ ?value ctx =
+    let value =
+        match value with
+        | Some value -> value
+        | None       -> V_Ne(N_Level ctx.level)
+    in
     { level  = ctx.level + 1
-    ; values = V_Ne(N_Level ctx.level) :: ctx.values
-   ; typs   = typ :: ctx.typs
+    ; values = value :: ctx.values
+    ; typs   = typ :: ctx.typs
     ; locals = (name, typ) :: ctx.locals }
 
 
@@ -64,6 +69,20 @@ let rec infer globals ctx expr =
             | V_Axiom typ | V_Def(_, typ) -> typ, C_TopVar name
             | exception Not_found         -> raise @@ TypeError(expr.span, UnboundVar name)
         end
+    | E_Let((name, ann, rhs), body) ->
+        let rhs_typ, c_rhs =
+            match ann with
+            | Some ann ->
+                let _, c_ann = check_typ globals ctx ann in
+                let rhs_typ = eval globals ctx.values c_ann in
+                (rhs_typ, check "type annotation" globals ctx rhs_typ rhs)
+            | None ->
+                infer globals ctx rhs
+        in
+        let ctx' = add_local name rhs_typ ~value:(eval globals ctx.values c_rhs) ctx in
+        let res_typ, c_body = infer globals ctx' body in
+        res_typ, C_Let((name, c_rhs), c_body)
+
 
     | E_Ann(expr', typ) ->
         let _, ctyp = check_typ globals ctx typ in
@@ -155,6 +174,20 @@ let rec infer globals ctx expr =
 
 and check err_ctx globals ctx typ expr =
     match typ, expr.shape with
+    | _, E_Let((name, ann, rhs), body) ->
+        let rhs_typ, c_rhs =
+            match ann with
+            | Some ann ->
+                let _, c_ann = check_typ globals ctx ann in
+                let rhs_typ = eval globals ctx.values c_ann in
+                (rhs_typ, check "type annotation" globals ctx rhs_typ rhs)
+            | None ->
+                infer globals ctx rhs
+        in
+        let ctx' = add_local name rhs_typ ~value:(eval globals ctx.values c_rhs) ctx in
+        let c_body = check err_ctx globals ctx' typ body in
+        C_Let((name, c_rhs), c_body)
+
     | V_TyFun((_, param_ty), ret_ty), E_Fun((name, ann), body) ->
         let param_ty =
             match ann with

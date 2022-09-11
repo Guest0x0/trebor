@@ -124,6 +124,13 @@ let f : forall (A : Type 0) -> A -> A
 let f = fun A a -> a
 " ;;
 
+register_test "basic.let" None "
+let program = fun (A : Type) (f : A -> A -> A) ->
+    let ff = fun (x : A) -> f x x in
+    fun (x : A) -> ff (ff (ff x))
+" ;;
+
+
 register_test "basic.annotation" None "
 let f = fun (A : Type 0) -> (fun a -> a) : (A -> A)
 " ;;
@@ -184,6 +191,21 @@ let my-refl : forall (A : Type 0) (a : A) -> a = a
 let my-refl = fun A a -> eq-refl A a
 " ;;
 
+register_test "defeq.global" None "
+let g = fun (A : Type) (a : A) -> a
+
+let g-def : g = (fun (A : Type) (a : A) -> a)
+let g-def = ~eq-refl (forall (A : Type) -> A -> A) g
+" ;;
+
+register_test "defeq.let" None "
+let eq : forall (A B : Type) (f : A -> A -> A) (x : A) ->
+    (let ff = fun (x : A) -> f x x in ff (ff (ff x)))
+    = f (f (f x x) (f x x)) (f (f x x) (f x x))
+let eq = fun A B f x -> eq-refl A (let ff = fun (x : A) -> f x x in ff (ff (ff x)))
+" ;;
+
+
 register_test "defeq.fun.beta" None "
 let beta-id : forall (A : Type 0) (a : A) -> (fun (x : A) -> x) a = a
 let beta-id = fun A a -> eq-refl A a
@@ -225,7 +247,7 @@ let eq-snd : forall (A : Type) (B : A -> Type) (a : A) (b : B a) -> (a, b).2 = b
 let eq-snd = fun A B a b -> eq-refl (B a) b
 " ;;
 
-register_test "defeq.pair..eta" None "
+register_test "defeq.pair.eta" None "
 let pair-eta : forall (A : Type 0) (B : A -> Type 0) ->
     forall (p : exists (a : A) -> B a) -> p = (p.1, p.2) : (exists (a : A) -> B a)
 let pair-eta = fun A B p -> eq-refl (exists (a : A) -> B a) p

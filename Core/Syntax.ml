@@ -4,6 +4,7 @@
 type core =
     | C_TopVar of string
     | C_Local  of int
+    | C_Let    of (string * core) * core
 
     | C_Type  of int
     | C_Shift of int * core
@@ -43,6 +44,7 @@ type expr =
 and expr_shape =
     | E_Var    of string
     | E_Ann    of expr * expr
+    | E_Let    of (string * expr option * expr) * expr
 
     | E_Type   of int
     | E_Shift  of int * expr

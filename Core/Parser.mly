@@ -29,7 +29,7 @@ let error msg = raise (SyntaxError(cur_span (), msg))
 %token<string> TOK_NAME
 %token<int> TOK_INT
 %token TOK_KW_TYPE TOK_KW_FORALL TOK_KW_EXISTS
-%token TOK_KW_FUN TOK_KW_LET
+%token TOK_KW_FUN TOK_KW_LET TOK_KW_IN
 
 
 
@@ -74,17 +74,21 @@ top_level :
     | error                              { error "expecting top level clause" }
 ;
 
-expr:
-    | app_expr
+
+expr :
+    | binop_expr
         { $1 }
 
-    | expr TOK_COLON expr
-        { mk_expr @@ E_Ann($1, $3) }
+    | TOK_KW_LET TOK_NAME TOK_EQ expr TOK_KW_IN expr
+        { mk_expr @@ E_Let(($2, None, $4), $6) }
+
+    | TOK_KW_LET TOK_NAME TOK_COLON binop_expr TOK_EQ expr TOK_KW_IN expr
+        { mk_expr @@ E_Let(($2, Some $4, $6), $8) }
 
     | TOK_KW_FORALL param_list TOK_MINUS_GT expr
         { List.fold_right (fun param body -> mk_expr @@ E_TyFun(param, body)) $2 $4 }
 
-    | expr TOK_MINUS_GT expr
+    | binop_expr TOK_MINUS_GT expr
         { mk_expr @@ E_TyFun(("", $1), $3) }
 
     | TOK_KW_FUN param_list_opt_ann TOK_MINUS_GT expr
@@ -93,17 +97,25 @@ expr:
     | TOK_KW_EXISTS param_list TOK_MINUS_GT expr
         { List.fold_right (fun param body -> mk_expr @@ E_TyPair(param, body)) $2 $4 }
 
-    | expr TOK_COMMA expr
-        { mk_expr @@ E_Pair($1, $3) }
-
-    | expr TOK_EQ expr
-        { mk_expr @@ E_TyEq($1, $3) }
-
-    | expr TOK_COLON_GT expr
-        { mk_expr @@ E_Coe($1, $3) }
-
     | error
         { error "expecting expression" }
+;
+
+binop_expr:
+    | app_expr
+        { $1 }
+
+    | binop_expr TOK_COLON binop_expr
+        { mk_expr @@ E_Ann($1, $3) }
+
+    | binop_expr TOK_COMMA binop_expr
+        { mk_expr @@ E_Pair($1, $3) }
+
+    | binop_expr TOK_EQ binop_expr
+        { mk_expr @@ E_TyEq($1, $3) }
+
+    | binop_expr TOK_COLON_GT binop_expr
+        { mk_expr @@ E_Coe($1, $3) }
 ;
 
 app_expr:

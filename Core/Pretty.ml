@@ -36,6 +36,12 @@ let rec pp_core ctx fmt core =
     | C_Local idx ->
         fprintf fmt "%s" (List.nth ctx.names idx)
 
+    | C_Let((name, rhs), body) when ctx.prec <= prec_binder ->
+        let name, ctx' = add_var name ctx in
+        fprintf fmt "@[<hv>@[<hv2>let %s =@ %a@]@ in@ %a@]"
+            name (pp_core { ctx with prec = prec_binder }) rhs
+            (pp_core { ctx' with prec = prec_binder }) body
+
     | C_Type ulevel ->
         fprintf fmt "Type %d" ulevel
 
