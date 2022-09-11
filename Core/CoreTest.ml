@@ -68,6 +68,8 @@ let type_mismatch ctx expected actual err_ctx =
 
 let tests = ref []
 
+let verbose = true
+
 let register_test name expectation src =
     tests := (name, expectation, src) :: !tests
 
@@ -80,11 +82,11 @@ let run_test (name, expectation, src) =
     in
     let pp_result fmt = function
         | Ok _      -> fprintf fmt "actual result: well typed"
-        | Error exn -> fprintf fmt "@[<v2>actual result:@ %a@]" Pretty.pp_exception exn
+        | Error exn -> fprintf fmt "@[<v2>actual result:@ %a@]" (Pretty.pp_exception verbose) exn
     in
     let pp_expectation fmt = function
         | None     -> fprintf fmt "expected result: well typed"
-        | Some err -> fprintf fmt "@[<v2>expected result:@ %a@]" Pretty.pp_error err
+        | Some err -> fprintf fmt "@[<v2>expected result:@ %a@]" (Pretty.pp_error verbose) err
     in
     match result, expectation with
     | Ok _, None ->
@@ -266,6 +268,34 @@ let UIP = fun A B a b p q -> eq-refl (a = b) p
 register_test "defeq.coe.type" None "
 let eq : forall (p : Type = Type) (A : Type) -> A :> p = A
 let eq = fun p A -> ~eq-refl Type A
+" ;;
+
+register_test "defeq.coe.fun" None "
+let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
+    forall (eq : (forall (a : A1) -> B1 a) = (forall (a : A2) -> B2 a)) ->
+    forall (f : forall (a : A1) -> B1 a) ->
+        f :> eq = (fun (a2 : A2) ->
+            let eqA = ~eq-symm Type Type A1 A2 (fun-param-injective A1 A2 B1 B2 eq) in
+            let a1  = a2 :> eqA in 
+            let eqB = fun-ret-injective A1 A2 B1 B2 eq a1 a2
+                (eq-symm A2 A1 a2 a1 (coe-coherent A2 A1 a2 eqA))
+            in
+            f a1 :> eqB)
+let goal = fun A1 A2 B1 B2 eq f -> eq-refl (forall (a : A2) -> B2 a) (f :> eq)
+" ;;
+
+register_test "defeq.coe.pair" None "
+let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
+    forall (eq : (exists (a : A1) -> B1 a) = (exists (a : A2) -> B2 a)) ->
+    forall (pair : exists (a : A1) -> B1 a) ->
+        pair :> eq = (
+            let eqA = pair-fst-injective A1 A2 B1 B2 eq in
+            let a1 = pair.1 in
+            let a2 = a1 :> eqA in
+            let eqB = pair-snd-injective A1 A2 B1 B2 eq a1 a2 (coe-coherent A1 A2 a1 eqA) in
+            (a2, pair.2 :> eqB) : (exists (a : A2) -> B2 a)
+        )
+let goal = fun A1 A2 B1 B2 eq pair -> eq-refl (exists (a : A2) -> B2 a) (pair :> eq)
 " ;;
 
 

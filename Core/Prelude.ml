@@ -4,6 +4,9 @@ let eq-refl  : forall (A : Type 0) (a : A) -> a = a
 let eq-symm  : forall (A B : Type 0) (a : A) (b : B) -> a = b -> b = a
 let eq-trans : forall (A B C : Type 0) (a : A) (b : B) (c : C) -> a = b -> b = c -> a = c
 
+
+let coe-coherent : forall (A B : Type 0) (a : A) (eq : A = B) -> a = a :> eq
+
 let fun-param-injective : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     (forall (a1 : A1) -> B1 a1) = (forall (a2 : A2) -> B2 a2) -> A1 = A2
 

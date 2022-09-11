@@ -34,7 +34,7 @@ type top_level_value =
 
 
 let app_axiom axiom ?(shift=0) args =
-    V_Ne(List.fold_left (fun f arg -> N_App(f, arg)) (N_Axiom(0, axiom)) args)
+    V_Ne(List.fold_left (fun f arg -> N_App(f, arg)) (N_Axiom(shift, axiom)) args)
 
 
 let rec eval globals env core =
@@ -130,7 +130,9 @@ and value_coe target eq lhs rhs =
         target
 
     | V_TyFun((name1, param_typ1), ret_typ1), V_TyFun((name2, param_typ2), ret_typ2) ->
-        let param_eq = lazy(app_axiom "eq-symm" [
+        let param_eq = lazy(app_axiom "eq-symm" ~shift:1 [
+                V_Type 0; V_Type 0;
+                param_typ1; param_typ2;
                 app_axiom "fun-param-injective"
                     [ param_typ1; param_typ2
                     ; V_Fun(name1, ret_typ1); V_Fun(name2, ret_typ2)
@@ -145,7 +147,14 @@ and value_coe target eq lhs rhs =
             let param1 = value_coe param2 param_eq param_typ2 param_typ1 in
             let ret1 = value_apply target param1 in
             value_coe ret1
-                (lazy(value_apply (value_apply (Lazy.force ret_eq) param1) param2))
+                (lazy(List.fold_left value_apply (Lazy.force ret_eq)
+                                [ param1; param2
+                                ; app_axiom "eq-symm"
+                                        [ param_typ2; param_typ1
+                                        ; param2; param1
+                                        ; app_axiom "coe-coherent"
+                                                [ param_typ2; param_typ1
+                                                ; param2; Lazy.force param_eq ]]]))
                 (ret_typ1 param1) (ret_typ2 param2))
 
     | V_TyPair((name1, fst_typ1), snd_typ1), V_TyPair((name2, fst_typ2), snd_typ2) ->
@@ -154,21 +163,18 @@ and value_coe target eq lhs rhs =
                 ; V_Fun(name1, snd_typ1); V_Fun(name2, snd_typ2)
                 ; Lazy.force eq ])
         in
+        let fst1 = value_proj target `Fst in
+        let fst2 = value_coe fst1 fst_eq fst_typ1 fst_typ2 in
         let snd_eq = lazy(app_axiom "pair-snd-injective"
                 [ fst_typ1; fst_typ2
                 ; V_Fun(name1, snd_typ1); V_Fun(name2, snd_typ2)
-                ; Lazy.force eq ])
+                ; Lazy.force eq
+                ; fst1; fst2
+                ; app_axiom "coe-coherent" [fst_typ1; fst_typ2; fst1; Lazy.force fst_eq] ])
         in
-        let fst1 = value_proj target `Fst in
-        let fst2 = value_coe fst1 fst_eq fst_typ1 fst_typ2 in
         V_Pair(
             fst2,
-            value_coe (value_proj target `Snd)
-                (lazy(List.fold_left value_apply (Lazy.force snd_eq)
-                                [ fst1; fst2
-                                ; app_axiom "coe-coherence"
-                                        [fst_typ1; fst_typ2; fst1; Lazy.force fst_eq]]))
-                (snd_typ1 fst1) (snd_typ2 fst2)
+            value_coe (value_proj target `Snd) snd_eq (snd_typ1 fst1) (snd_typ2 fst2)
         )
     | _ ->
         V_Ne(N_Coe { target; eq; lhs; rhs })
@@ -238,7 +244,13 @@ and quote_neutral globals level env neutral =
         C_Local idx, List.nth env idx
     | N_Axiom(shift, a) ->
         let (V_Axiom typ | V_Def(_, typ)) = Hashtbl.find globals a in
-        C_Shift(shift ,C_TopVar a), value_shift shift typ
+        let core =
+            match Int.compare shift 0 with
+            | n when n < 0 -> C_TopVar a
+            | 0            -> C_Shift(shift, C_TopVar a)
+            | _            -> failwith "Core.Normalization.runtime_error"
+        in
+        core, value_shift shift typ
     | N_App(ne_f, v_arg) ->
         begin match quote_neutral globals level env ne_f with
         | f, V_TyFun((_, a), b) -> C_App(f, quote_value globals level env a v_arg), b v_arg

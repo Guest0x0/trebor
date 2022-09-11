@@ -8,7 +8,8 @@ let prec_comma  = 20
 let prec_eq     = 30
 let prec_coe    = 40
 let prec_app    = 50
-let prec_atom   = 60
+let prec_shift  = 60
+let prec_proj   = 70
 
 
 type pp_context =
@@ -45,6 +46,14 @@ let rec pp_core ctx fmt core =
     | C_Type ulevel ->
         fprintf fmt "Type %d" ulevel
 
+    | C_Shift(shift, core') when ctx.prec <= prec_shift ->
+        begin match shift with
+        | 0 -> pp_core ctx fmt core'
+        | 1 -> fprintf fmt "@[<hov2>~@ %a@]" (pp_core { ctx with prec = prec_shift }) core'
+        | _ ->
+            fprintf fmt "@[<hov2>~%d@ %a@]" shift (pp_core { ctx with prec = prec_shift }) core'
+        end
+
     | C_TyFun(a, b) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>forall %a@]"
             (pp_core_tyfun { ctx with prec = prec_binder }) (a, b)
@@ -66,7 +75,7 @@ let rec pp_core ctx fmt core =
 
     | C_Proj(pair, field) ->
         fprintf fmt "%a.%d"
-            (pp_core { ctx with prec = prec_atom }) pair
+            (pp_core { ctx with prec = prec_proj }) pair
             (match field with `Fst -> 1 | `Snd -> 2)
 
     | C_TyEq((lhs, lhs_typ), (rhs, rhs_typ)) when ctx.prec <= prec_eq ->
@@ -166,25 +175,25 @@ let pp_span fmt span =
         span.lhs.pos_fname
 
 
-let pp_error fmt err =
+let pp_error verbose fmt err =
     match err with
     | UnboundVar name -> fprintf fmt "unbound variable %s" name
     | CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
     | WrongType(ctx, typ, expected) ->
         fprintf fmt "@[<v>expected: %s@ found: %a@ "
-            expected (pp_core @@ List.map fst ctx) typ;
-        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context false) ctx
+            expected (pp_core ~verbose @@ List.map fst ctx) typ;
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
     | TypeMismatch(ctx, expected, actual, err_ctx) ->
         let names = List.map fst ctx in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
-        fprintf fmt "expected: %a@ " (pp_core names) expected;
-        fprintf fmt "received: %a@ " (pp_core names) actual;
-        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context false) ctx
+        fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
+        fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
 
 
-let pp_exception fmt exn =
+let pp_exception verbose fmt exn =
     match exn with
     | TypeError(span, err) ->
-        fprintf fmt "@[<v>at %a:@ %a@]" pp_span span pp_error err
+        fprintf fmt "@[<v>at %a:@ %a@]" pp_span span (pp_error verbose) err
     | exn ->
         fprintf fmt "fatal exception %s" (Printexc.to_string exn)
