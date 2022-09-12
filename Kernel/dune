@@ -1,0 +1,12 @@
+
+(library
+ (name kernel)
+ (modules Core Value Unification Syntax Parser Lexer Pretty Elaborate Prelude))
+
+(test
+ (name KernelTest)
+ (libraries kernel)
+ (modules KernelTest))
+
+(ocamlyacc Parser)
+(ocamllex  Lexer)

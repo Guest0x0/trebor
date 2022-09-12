@@ -1,6 +1,5 @@
 
-open Core
-open Syntax
+open Kernel
 
 let parse_lexbuf lexbuf = Parser.program Lexer.token lexbuf
 let parse_string ?filename src =
@@ -14,56 +13,54 @@ let expr_of_string src =
     Parser.single_expr Lexer.token lexbuf
 
 let core_of_string globals ctx src =
-    let _, core = Typecheck.check_typ globals ctx (expr_of_string src) in
+    let _, core = Elaborate.check_typ globals ctx (expr_of_string src) in
     core
 
 
 
 let error_equal globals err1 err2 =
-    let open Normalization in
+    let rec context_equal ctx1 ctx2 =
+        match ctx1, ctx2 with
+        | [], [] ->
+            true
+        | (name1, typ1) :: ctx1', (name2, typ2) :: ctx2' ->
+            name1 = name2 && Core.term_equal typ1 typ2 && context_equal ctx1' ctx2'
+        | _ ->
+            false
+    in
+    let open Syntax in
     match err1, err2 with
     | UnboundVar name1, UnboundVar name2 -> name1 = name2
     | CannotInfer ctx1, CannotInfer ctx2 -> ctx1 = ctx2
     | WrongType(ctx1, typ1, err_ctx1)
     , WrongType(ctx2, typ2, err_ctx2) ->
-        let level = List.length ctx1 in
-        let v_ctx1 = eval_context globals ctx1 in
-        let v_ctx2 = eval_context globals ctx2 in
-        let values = List.mapi (fun idx _ -> V_Ne(N_Level(level - idx - 1))) ctx1 in
-        context_equal globals v_ctx1 v_ctx2
-        && typ_equal globals (List.length v_ctx1) v_ctx1
-            (eval globals values typ1) (eval globals values typ2)
+        context_equal ctx1 ctx2
+        && Core.term_equal typ1 typ2
         && err_ctx1 = err_ctx2
     | TypeMismatch(ctx1, expected1, actual1, err_ctx1)
     , TypeMismatch(ctx2, expected2, actual2, err_ctx2) ->
-        let level = List.length ctx1 in
-        let v_ctx1 = eval_context globals ctx1 in
-        let v_ctx2 = eval_context globals ctx2 in
-        let values = List.mapi (fun idx _ -> V_Ne(N_Level(level - idx - 1))) ctx1 in
-        context_equal globals v_ctx1 v_ctx2
-        && typ_equal globals (List.length v_ctx1) v_ctx1
-            (eval globals values expected1) (eval globals values expected2)
-        && typ_equal globals (List.length v_ctx1) v_ctx1
-            (eval globals values actual1) (eval globals values actual2)
+        context_equal ctx1 ctx2
+        && Core.term_equal expected1 expected2
+        && Core.term_equal actual1 actual2
         && err_ctx1 = err_ctx2
     | _ ->
         false
 
 
 let wrong_type ctx typ err_ctx =
-    let globals = Hashtbl.create 0 in
+    let g = Hashtbl.create 0 in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
-    let c_ctx, v_ctx = Typecheck.check_context globals ctx in
-    WrongType(c_ctx, core_of_string globals v_ctx typ, err_ctx)
+    let ctxC, elab_ctx = Elaborate.check_context g ctx in
+    Syntax.WrongType(ctxC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
     let globals = Hashtbl.create 0 in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
-    let c_ctx, v_ctx = Typecheck.check_context globals ctx in
-    TypeMismatch( c_ctx
-                , core_of_string globals v_ctx expected
-                , core_of_string globals v_ctx actual
-                , err_ctx )
+    let ctxC, elab_ctx = Elaborate.check_context globals ctx in
+    Syntax.TypeMismatch( ctxC
+                       , core_of_string globals elab_ctx expected
+                       , core_of_string globals elab_ctx actual
+                       , err_ctx )
 
 
 let tests = ref []
@@ -75,9 +72,9 @@ let register_test name expectation src =
 
 let run_test (name, expectation, src) =
     let open Format in
-    let globals = Prelude.make_globals 37 in
+    let g = Prelude.make_globals 37 in
     let result =
-        try Ok(Typecheck.check_program globals (parse_string ~filename:name src)) with
+        try Ok(Elaborate.check_program g (parse_string ~filename:name src)) with
           exn -> Error exn
     in
     let pp_result fmt = function
@@ -91,7 +88,7 @@ let run_test (name, expectation, src) =
     match result, expectation with
     | Ok _, None ->
         printf "test %s passed@ " name; true
-    | Error(TypeError(_, err)), Some err' when error_equal globals err err' ->
+    | Error(Syntax.Error(_, err)), Some err' when error_equal g err err' ->
         printf "test %s passed@ " name; true
     | _ ->
         printf "test %s failed:@ %a@ %a@ " name pp_expectation expectation pp_result result;
@@ -222,8 +219,8 @@ let danger = fun A -> eq-refl (A -> A -> A) (fun (x : A) (y : A) -> x)
 
 register_test "defeq.fun.beta.under-binder-counter" (Some(
         type_mismatch ["A", "Type 0"]
-            "(fun (x : A) -> (fun (y : A) (x : A) -> y) x) = (fun (x : A) (y : A) -> y)"
-            "(fun (x : A) -> (fun (y : A) (x : A) -> y) x) = (fun (x : A) (y : A) -> x)"
+            "(fun (x : A) (y : A) -> x) = (fun (x : A) (y : A) -> y)"
+            "(fun (x : A) (y : A) -> x) = (fun (x : A) (y : A) -> x)"
             "global definition"
 )) "
 let bad : forall (A : Type 0) ->

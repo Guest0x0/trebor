@@ -13,9 +13,7 @@ let join_span sp1 sp2 =
     ; rhs = sp2.rhs }
 
 
-exception SyntaxError of span * string
-
-let error msg = raise (SyntaxError(cur_span (), msg))
+let error msg = raise (Error(cur_span (), SyntaxError msg))
 %}
 
 %token TOK_EOF
@@ -44,10 +42,10 @@ let error msg = raise (SyntaxError(cur_span (), msg))
 %type<Syntax.expr> single_expr
 %start single_expr
 
-%type<Syntax.top_level> single_top_level
+%type<Syntax.span * Syntax.top_level> single_top_level
 %start single_top_level
 
-%type<Syntax.top_level list> program
+%type<(Syntax.span * Syntax.top_level) list> program
 %start program
 
 %%
@@ -69,8 +67,8 @@ single_expr :
 
 
 top_level :
-    | TOK_KW_LET TOK_NAME TOK_COLON expr { AxiomDecl ($2, $4) }
-    | TOK_KW_LET TOK_NAME TOK_EQ    expr { Definition($2, $4) }
+    | TOK_KW_LET TOK_NAME TOK_COLON expr { cur_span (), AxiomDecl ($2, $4) }
+    | TOK_KW_LET TOK_NAME TOK_EQ    expr { cur_span (), Definition($2, $4) }
     | error                              { error "expecting top level clause" }
 ;
 
@@ -80,22 +78,22 @@ expr :
         { $1 }
 
     | TOK_KW_LET TOK_NAME TOK_EQ expr TOK_KW_IN expr
-        { mk_expr @@ E_Let(($2, None, $4), $6) }
+        { mk_expr @@ Let(($2, None, $4), $6) }
 
     | TOK_KW_LET TOK_NAME TOK_COLON binop_expr TOK_EQ expr TOK_KW_IN expr
-        { mk_expr @@ E_Let(($2, Some $4, $6), $8) }
+        { mk_expr @@ Let(($2, Some $4, $6), $8) }
 
     | TOK_KW_FORALL param_list TOK_MINUS_GT expr
-        { List.fold_right (fun param body -> mk_expr @@ E_TyFun(param, body)) $2 $4 }
+        { List.fold_right (fun (name, typ) body -> mk_expr @@ TyFun(name, typ, body)) $2 $4 }
 
     | binop_expr TOK_MINUS_GT expr
-        { mk_expr @@ E_TyFun(("", $1), $3) }
+        { mk_expr @@ TyFun("", $1, $3) }
 
     | TOK_KW_FUN param_list_opt_ann TOK_MINUS_GT expr
-        { List.fold_right (fun param body -> mk_expr @@ E_Fun(param, body)) $2 $4 }
+        { List.fold_right (fun (name, typ) body -> mk_expr @@ Fun(name, typ, body)) $2 $4 }
 
     | TOK_KW_EXISTS param_list TOK_MINUS_GT expr
-        { List.fold_right (fun param body -> mk_expr @@ E_TyPair(param, body)) $2 $4 }
+        { List.fold_right (fun (name, typ) body -> mk_expr @@ TyPair(name, typ, body)) $2 $4 }
 
     | error
         { error "expecting expression" }
@@ -106,16 +104,16 @@ binop_expr:
         { $1 }
 
     | binop_expr TOK_COLON binop_expr
-        { mk_expr @@ E_Ann($1, $3) }
+        { mk_expr @@ Ann($1, $3) }
 
     | binop_expr TOK_COMMA binop_expr
-        { mk_expr @@ E_Pair($1, $3) }
+        { mk_expr @@ Pair($1, $3) }
 
     | binop_expr TOK_EQ binop_expr
-        { mk_expr @@ E_TyEq($1, $3) }
+        { mk_expr @@ TyEq($1, $3) }
 
     | binop_expr TOK_COLON_GT binop_expr
-        { mk_expr @@ E_Coe($1, $3) }
+        { mk_expr @@ Coe($1, $3) }
 ;
 
 app_expr:
@@ -123,26 +121,26 @@ app_expr:
         { $1 }
 
     | app_expr atom_expr
-        { mk_expr @@ E_App($1, $2) }
+        { mk_expr @@ App($1, $2) }
 ;
 
 atom_expr :
     | TOK_NAME
-        { mk_expr @@ E_Var $1 }
+        { mk_expr @@ Var $1 }
 
     | TOK_KW_TYPE
-        { mk_expr @@ E_Type 0 }
+        { mk_expr @@ Type 0 }
 
     | TOK_KW_TYPE TOK_INT
-        { mk_expr @@ E_Type $2 }
+        { mk_expr @@ Type $2 }
 
     | TOK_TILDE atom_expr
-        { mk_expr @@ E_Shift(1, $2) }
+        { mk_expr @@ Shift(1, $2) }
 
     | atom_expr TOK_DOT TOK_INT
         { match $3 with
-          | 1 -> mk_expr @@ E_Proj($1, `Fst)
-          | 2 -> mk_expr @@ E_Proj($1, `Snd)
+          | 1 -> mk_expr @@ Proj($1, `Fst)
+          | 2 -> mk_expr @@ Proj($1, `Snd)
           | _ -> failwith "invalid field of pair" }
 
     | TOK_LPAREN expr TOK_RPAREN

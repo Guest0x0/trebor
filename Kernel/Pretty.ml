@@ -1,5 +1,4 @@
 
-open Syntax
 open Format
 
 
@@ -31,22 +30,22 @@ let incr_prec  ctx = { ctx with prec  = ctx.prec  + 1 }
 
 let rec pp_core ctx fmt core =
     match core with
-    | C_TopVar name ->
+    | Core.TopVar name ->
         fprintf fmt "%s" name
 
-    | C_Local idx ->
+    | Core.Local idx ->
         fprintf fmt "%s" (List.nth ctx.names idx)
 
-    | C_Let((name, rhs), body) when ctx.prec <= prec_binder ->
+    | Core.Let(name, rhs, body) when ctx.prec <= prec_binder ->
         let name, ctx' = add_var name ctx in
         fprintf fmt "@[<hv>@[<hv2>let %s =@ %a@]@ in@ %a@]"
             name (pp_core { ctx with prec = prec_binder }) rhs
             (pp_core { ctx' with prec = prec_binder }) body
 
-    | C_Type ulevel ->
+    | Core.Type ulevel ->
         fprintf fmt "Type %d" ulevel
 
-    | C_Shift(shift, core') when ctx.prec <= prec_shift ->
+    | Core.Shift(shift, core') when ctx.prec <= prec_shift ->
         begin match shift with
         | 0 -> pp_core ctx fmt core'
         | 1 -> fprintf fmt "@[<hov2>~@ %a@]" (pp_core { ctx with prec = prec_shift }) core'
@@ -54,31 +53,31 @@ let rec pp_core ctx fmt core =
             fprintf fmt "@[<hov2>~%d@ %a@]" shift (pp_core { ctx with prec = prec_shift }) core'
         end
 
-    | C_TyFun(a, b) when ctx.prec <= prec_binder ->
+    | Core.TyFun(name, a, b) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>forall %a@]"
-            (pp_core_tyfun { ctx with prec = prec_binder }) (a, b)
+            (pp_core_tyfun { ctx with prec = prec_binder }) (name, a, b)
 
-    | C_Fun(name, body) when ctx.prec <= prec_binder ->
+    | Core.Fun(name, body) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>fun %a@]"
             (pp_core_fun { ctx with prec = prec_binder }) (name, body)
 
-    | C_App(f, a) when ctx.prec <= prec_app ->
+    | Core.App(f, a) when ctx.prec <= prec_app ->
         fprintf fmt "@[<hov2>%a@]" (pp_core_app { ctx with prec = prec_app }) (f, a)
 
-    | C_TyPair(a, b) when ctx.prec <= prec_binder ->
+    | Core.TyPair(name, a, b) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>exists %a@]"
-            (pp_core_typair { ctx with prec = prec_binder }) (a, b)
+            (pp_core_typair { ctx with prec = prec_binder }) (name, a, b)
 
-    | C_Pair(fst, snd) when ctx.prec <= prec_comma ->
+    | Core.Pair(fst, snd) when ctx.prec <= prec_comma ->
         fprintf fmt "@[<hov2>%a@]"
             (pp_core_pair { ctx with prec = prec_comma }) (fst, snd)
 
-    | C_Proj(pair, field) ->
+    | Core.Proj(pair, field) ->
         fprintf fmt "%a.%d"
             (pp_core { ctx with prec = prec_proj }) pair
             (match field with `Fst -> 1 | `Snd -> 2)
 
-    | C_TyEq((lhs, lhs_typ), (rhs, rhs_typ)) when ctx.prec <= prec_eq ->
+    | Core.TyEq((lhs, lhs_typ), (rhs, rhs_typ)) when ctx.prec <= prec_eq ->
         begin match ctx.verbose with
         | true ->
             fprintf fmt "@[<hov2>%a : %a =@ %a : %a@]"
@@ -92,8 +91,8 @@ let rec pp_core ctx fmt core =
                 (pp_core { ctx with prec = prec_eq + 1}) rhs
         end
 
-    | C_Coe { target; eq; _ } when ctx.prec <= prec_coe ->
-        fprintf fmt "@[<hov2>%a :>@ " (pp_core { ctx with prec = prec_coe }) target;
+    | Core.Coe { coerced; eq; _ } when ctx.prec <= prec_coe ->
+        fprintf fmt "@[<hov2>%a :>@ " (pp_core { ctx with prec = prec_coe }) coerced;
         if ctx.verbose
         then fprintf fmt "%a@]" (pp_core { ctx with prec = prec_coe + 1 }) (Lazy.force eq)
         else fprintf fmt "_@]"
@@ -102,38 +101,38 @@ let rec pp_core ctx fmt core =
         fprintf fmt "(%a)" (pp_core { ctx with prec = 0 }) core
 
 
-and pp_core_tyfun ctx fmt ((name, a), b) =
+and pp_core_tyfun ctx fmt (name, a, b) =
     let name, ctx' = add_var name ctx in
     fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
     match b with
-    | C_TyFun(a', b') -> fprintf fmt "@ %a" (pp_core_tyfun ctx') (a', b')
-    | _               -> fprintf fmt " ->@ %a" (pp_core ctx') b
+    | Core.TyFun(name', a', b') -> fprintf fmt "@ %a" (pp_core_tyfun ctx') (name', a', b')
+    | _                         -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
-and pp_core_typair ctx fmt ((name, a), b) =
+and pp_core_typair ctx fmt (name, a, b) =
     let name, ctx' = add_var name ctx in
     fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
     match b with
-    | C_TyPair(a', b') -> fprintf fmt "@ %a" (pp_core_typair ctx') (a', b')
-    | _                -> fprintf fmt " ->@ %a" (pp_core ctx') b
+    | Core.TyPair(name', a', b') -> fprintf fmt "@ %a" (pp_core_typair ctx') (name', a', b')
+    | _                          -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
 and pp_core_fun ctx fmt (name, body) =
     let name, ctx' = add_var name ctx in
     fprintf fmt "%s" name; 
     match body with
-    | C_Fun(name', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', body')
+    | Core.Fun(name', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', body')
     | _           -> fprintf fmt " ->@ %a" (pp_core ctx') body
 
 
 and pp_core_pair ctx fmt (fst, snd) =
     fprintf fmt "%a,@ " (pp_core @@ incr_prec ctx) fst;
     match snd with
-    | C_Pair(fst', snd') -> pp_core_pair ctx fmt (fst', snd')
+    | Core.Pair(fst', snd') -> pp_core_pair ctx fmt (fst', snd')
     | _                  -> pp_core ctx fmt snd
 
 
 and  pp_core_app ctx fmt (f, a) =
     begin match f with
-    | C_App(f', a') -> pp_core_app ctx fmt (f', a')
+    | Core.App(f', a') -> pp_core_app ctx fmt (f', a')
     | _             -> pp_core ctx fmt f
     end;
     fprintf fmt "@ %a" (pp_core @@ incr_prec ctx) a
@@ -146,9 +145,9 @@ let pp_core ?(verbose=false) names =
 
 let pp_core_top_level verbose fmt top =
     match top with
-    | C_AxiomDecl(name, typ) ->
+    | Core.AxiomDecl(name, typ) ->
         fprintf fmt "let %s : %a" name (pp_core ~verbose []) typ
-    | C_Definition(name, def, typ) ->
+    | Core.Definition(name, def, typ) ->
         fprintf fmt "@[<v>let %s : %a@ let %s = %a@]"
             name (pp_core ~verbose []) typ
             name (pp_core ~verbose []) def
@@ -169,6 +168,7 @@ let pp_context verbose fmt ctx =
 
 
 let pp_span fmt span =
+    let open Syntax in
     fprintf fmt "[%d:%d to %d:%d, %s]"
         span.lhs.pos_lnum (span.lhs.pos_cnum - span.lhs.pos_bol)
         span.rhs.pos_lnum (span.rhs.pos_cnum - span.rhs.pos_bol)
@@ -177,23 +177,26 @@ let pp_span fmt span =
 
 let pp_error verbose fmt err =
     match err with
-    | UnboundVar name -> fprintf fmt "unbound variable %s" name
-    | CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
-    | WrongType(ctx, typ, expected) ->
+    | Syntax.SyntaxError msg -> fprintf fmt "syntax error: %s" msg
+    | Syntax.UnboundVar name -> fprintf fmt "unbound variable %s" name
+    | Syntax.CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
+    | Syntax.WrongType(ctx, typ, expected) ->
         fprintf fmt "@[<v>expected: %s@ found: %a@ "
             expected (pp_core ~verbose @@ List.map fst ctx) typ;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
-    | TypeMismatch(ctx, expected, actual, err_ctx) ->
+    | Syntax.TypeMismatch(ctx, expected, actual, err_ctx) ->
         let names = List.map fst ctx in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
         fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
         fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
+    | Syntax.RedeclareVar name -> fprintf fmt "re-declaring %s" name
+    | Syntax.RedefineVar  name -> fprintf fmt "re-defining %s" name
 
 
 let pp_exception verbose fmt exn =
     match exn with
-    | TypeError(span, err) ->
+    | Syntax.Error(span, err) ->
         fprintf fmt "@[<v>at %a:@ %a@]" pp_span span (pp_error verbose) err
     | exn ->
         fprintf fmt "fatal exception %s" (Printexc.to_string exn)

@@ -5,10 +5,9 @@
         -warn-error -a+31
         -w +a-4-6-7-9-27-29-30-32..42-44-45-48-50-60-66-67-68))))
 
-(data_only_dirs
- pohai Core0)
+(data_only_dirs pohai)
 
 (executable
  (name trebor)
- (libraries core))
+ (libraries kernel))
 
