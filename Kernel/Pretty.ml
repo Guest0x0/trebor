@@ -1,4 +1,5 @@
 
+open Syntax
 open Format
 
 
@@ -177,26 +178,26 @@ let pp_span fmt span =
 
 let pp_error verbose fmt err =
     match err with
-    | Syntax.SyntaxError msg -> fprintf fmt "syntax error: %s" msg
-    | Syntax.UnboundVar name -> fprintf fmt "unbound variable %s" name
-    | Syntax.CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
-    | Syntax.WrongType(ctx, typ, expected) ->
+    | Error.SyntaxError msg -> fprintf fmt "syntax error: %s" msg
+    | Error.UnboundVar name -> fprintf fmt "unbound variable %s" name
+    | Error.CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
+    | Error.WrongType(ctx, typ, expected) ->
         fprintf fmt "@[<v>expected: %s@ found: %a@ "
             expected (pp_core ~verbose @@ List.map fst ctx) typ;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
-    | Syntax.TypeMismatch(ctx, expected, actual, err_ctx) ->
+    | Error.TypeMismatch(ctx, expected, actual, err_ctx) ->
         let names = List.map fst ctx in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
         fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
         fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
-    | Syntax.RedeclareVar name -> fprintf fmt "re-declaring %s" name
-    | Syntax.RedefineVar  name -> fprintf fmt "re-defining %s" name
+    | Error.RedeclareVar name -> fprintf fmt "re-declaring %s" name
+    | Error.RedefineVar  name -> fprintf fmt "re-defining %s" name
 
 
 let pp_exception verbose fmt exn =
     match exn with
-    | Syntax.Error(span, err) ->
+    | Error.Error(span, err) ->
         fprintf fmt "@[<v>at %a:@ %a@]" pp_span span (pp_error verbose) err
     | exn ->
         fprintf fmt "fatal exception %s" (Printexc.to_string exn)

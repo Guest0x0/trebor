@@ -1,5 +1,7 @@
 
+open Syntax
 open Value
+open Eval
 
 exception UnificationFailure
 
@@ -53,13 +55,13 @@ and unify_elim g level env head head_typ elim1 elim2 =
     | App(elim1', arg1), App(elim2', arg2) ->
         begin match unify_elim g level env head head_typ elim1' elim2' with
         | TyFun(_, a, b) -> unify_value g level env a arg1 arg2; b arg1
-        | _              -> raise Value.RuntimeError
+        | _              -> raise RuntimeError
         end
     | Proj(elim1', field1), Proj(elim2', field2) when field1 = field2 ->
         begin match unify_elim g level env head head_typ elim1' elim2', field1 with
         | TyPair(_, a, b), `Fst -> a
         | TyPair(_, a, b), `Snd -> b @@ Stuck(head, Proj(elim1', `Fst))
-        | _                     -> raise Value.RuntimeError
+        | _                     -> raise RuntimeError
         end
     | _ ->
         raise UnificationFailure

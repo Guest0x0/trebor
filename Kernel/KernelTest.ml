@@ -18,13 +18,48 @@ let core_of_string globals ctx src =
 
 
 
+
+let rec term_equal tm1 tm2 =
+    let open Syntax.Core in
+    match tm1, tm2 with
+    | TopVar name1       , TopVar name2        -> name1 = name2
+    | Local  idx1        , Local  idx2         -> idx1 = idx2
+    | Let(_, rhs1, body1), Let(_, rhs2, body2) -> term_equal rhs1 rhs2 && term_equal body1 body2
+
+    | Type ulevel1       , Type ulevel2        -> ulevel1 = ulevel2
+    | Shift(level1, tm1'), Shift(level2, tm2') -> level1 = level2 && term_equal tm1' tm2'
+
+    | TyFun(_, a1, b1), TyFun(_, a2, b2) -> term_equal a1 a2 && term_equal b1 b2
+    | Fun(_, body1)   , Fun(_, body2)    -> term_equal body1 body2
+    | App(f1, a1)     , App(f2, a2)      -> term_equal f1 f2 && term_equal a1 a2
+
+    | TyPair(_, a1, b1), TyPair(_, a2, b2) -> term_equal a1 a2 && term_equal b1 b2
+    | Pair(fst1, snd1) , Pair(fst2, snd2)  -> term_equal fst1 fst2 && term_equal snd1 snd2
+    | Proj(p1, field1) , Proj(p2, field2)  -> field1 = field2 && term_equal p1 p2
+
+    | TyEq( (lhs1, lhs_typ1), (rhs1, rhs_typ1) )
+    , TyEq( (lhs2, lhs_typ2), (rhs2, rhs_typ2) ) ->
+        term_equal lhs1 lhs2
+        && term_equal lhs_typ1 lhs_typ2
+        && term_equal rhs1 rhs2
+        && term_equal rhs_typ1 rhs_typ2
+    | Coe coe1, Coe coe2 ->
+        term_equal coe1.coerced coe2.coerced
+        && term_equal coe1.lhs coe2.lhs
+        && term_equal coe1.rhs coe2.rhs
+
+    | _ ->
+        false
+
+
 let error_equal globals err1 err2 =
+    let open Syntax.Error in
     let rec context_equal ctx1 ctx2 =
         match ctx1, ctx2 with
         | [], [] ->
             true
         | (name1, typ1) :: ctx1', (name2, typ2) :: ctx2' ->
-            name1 = name2 && Core.term_equal typ1 typ2 && context_equal ctx1' ctx2'
+            name1 = name2 && term_equal typ1 typ2 && context_equal ctx1' ctx2'
         | _ ->
             false
     in
@@ -35,13 +70,13 @@ let error_equal globals err1 err2 =
     | WrongType(ctx1, typ1, err_ctx1)
     , WrongType(ctx2, typ2, err_ctx2) ->
         context_equal ctx1 ctx2
-        && Core.term_equal typ1 typ2
+        && term_equal typ1 typ2
         && err_ctx1 = err_ctx2
     | TypeMismatch(ctx1, expected1, actual1, err_ctx1)
     , TypeMismatch(ctx2, expected2, actual2, err_ctx2) ->
         context_equal ctx1 ctx2
-        && Core.term_equal expected1 expected2
-        && Core.term_equal actual1 actual2
+        && term_equal expected1 expected2
+        && term_equal actual1 actual2
         && err_ctx1 = err_ctx2
     | _ ->
         false
@@ -51,16 +86,16 @@ let wrong_type ctx typ err_ctx =
     let g = Hashtbl.create 0 in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
     let ctxC, elab_ctx = Elaborate.check_context g ctx in
-    Syntax.WrongType(ctxC, core_of_string g elab_ctx typ, err_ctx)
+    Syntax.Error.WrongType(ctxC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
     let globals = Hashtbl.create 0 in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
     let ctxC, elab_ctx = Elaborate.check_context globals ctx in
-    Syntax.TypeMismatch( ctxC
-                       , core_of_string globals elab_ctx expected
-                       , core_of_string globals elab_ctx actual
-                       , err_ctx )
+    Syntax.Error.TypeMismatch( ctxC
+                             , core_of_string globals elab_ctx expected
+                             , core_of_string globals elab_ctx actual
+                             , err_ctx )
 
 
 let tests = ref []
@@ -88,7 +123,7 @@ let run_test (name, expectation, src) =
     match result, expectation with
     | Ok _, None ->
         printf "test %s passed@ " name; true
-    | Error(Syntax.Error(_, err)), Some err' when error_equal g err err' ->
+    | Error(Syntax.Error.Error(_, err)), Some err' when error_equal g err err' ->
         printf "test %s passed@ " name; true
     | _ ->
         printf "test %s failed:@ %a@ %a@ " name pp_expectation expectation pp_result result;

@@ -1,5 +1,6 @@
 %{
 open Syntax
+open Surface
 
 let cur_span () =
     { lhs = Parsing.symbol_start_pos ()
@@ -13,7 +14,7 @@ let join_span sp1 sp2 =
     ; rhs = sp2.rhs }
 
 
-let error msg = raise (Error(cur_span (), SyntaxError msg))
+let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 %}
 
 %token TOK_EOF
@@ -39,13 +40,13 @@ let error msg = raise (Error(cur_span (), SyntaxError msg))
 %left     TOK_DOT
 
 
-%type<Syntax.expr> single_expr
+%type<Syntax.Surface.expr> single_expr
 %start single_expr
 
-%type<Syntax.span * Syntax.top_level> single_top_level
+%type<Syntax.span * Syntax.Surface.top_level> single_top_level
 %start single_top_level
 
-%type<(Syntax.span * Syntax.top_level) list> program
+%type<(Syntax.span * Syntax.Surface.top_level) list> program
 %start program
 
 %%
