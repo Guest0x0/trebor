@@ -6,7 +6,7 @@ open Eval
 
 
 let rec value_to_core g level env typ value =
-    match typ, value with
+    match force g typ, force g value with
     | Type _, typv ->
         snd (typ_to_core g level env typv)
 
@@ -30,7 +30,7 @@ let rec value_to_core g level env typ value =
 and head_to_core g level env head =
     match head with
     | TopVar(shift, name) ->
-        let (AxiomDecl typ | Definition(typ, _)) = Hashtbl.find g name in
+        let (AxiomDecl typ | Definition(typ, _)) = g#find_global name in
         if shift = 0
         then typ, Core.TopVar name
         else typ, Core.Shift(shift, Core.TopVar name)
@@ -46,6 +46,11 @@ and head_to_core g level env head =
                    ; eq      = lazy(value_to_core g level env
                              (TyEq((lhs, Type ulevel), (rhs, Type ulevel)))
                              (Lazy.force eq)) } )
+    | Meta(shift, meta) ->
+        begin match g#find_meta meta with
+        | Free(name, typ) -> typ, Core.Shift(shift, Core.Meta(name, meta))
+        | Solved _     -> raise RuntimeError
+        end
 
 
 and elim_to_core g level env head elim =
@@ -72,7 +77,7 @@ and elim_to_core g level env head elim =
 
 
 and typ_to_core g level env typv =
-    match typv with
+    match force g typv with
     | Type ulevel ->
         ( ulevel + 1, Core.Type ulevel )
     | TyFun(name, a, b) ->

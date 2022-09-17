@@ -26,6 +26,7 @@ let add_var name ctx =
     in
     ( name, { ctx with names = name :: ctx.names; level = ctx.level + 1 })
 
+
 let incr_prec  ctx = { ctx with prec  = ctx.prec  + 1 }
 
 
@@ -97,6 +98,9 @@ let rec pp_core ctx fmt core =
         if ctx.verbose
         then fprintf fmt "%a@]" (pp_core { ctx with prec = prec_coe + 1 }) (Lazy.force eq)
         else fprintf fmt "_@]"
+
+    | Core.Meta(name, _) ->
+        fprintf fmt "?%s" name
 
     | _ ->
         fprintf fmt "(%a)" (pp_core { ctx with prec = 0 }) core

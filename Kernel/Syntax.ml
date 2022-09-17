@@ -1,4 +1,5 @@
 
+type meta = int
 
 module Value = struct
     type value =
@@ -19,11 +20,18 @@ module Value = struct
               ; lhs     : value
               ; rhs     : value
               ; eq      : value Lazy.t }
+        | Meta of int * meta
 
     and elimination =
         | EmptyElim
         | App   of elimination * value
         | Proj  of elimination * [`Fst | `Snd]
+
+
+    type meta_info =
+        | Free   of string * value
+        | Solved of value
+
 
 
     type top_level =
@@ -59,6 +67,8 @@ module Core = struct
               ; lhs     : expr
               ; rhs     : expr
               ; eq      : expr Lazy.t }
+
+        | Meta   of string * meta
 
 
 
@@ -100,7 +110,7 @@ module Surface = struct
 
     type top_level =
         | AxiomDecl  of string * expr
-        | Definition of string * expr
+        | Definition of string * expr option * expr
 
 
     type program = (span * top_level) list

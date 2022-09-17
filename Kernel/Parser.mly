@@ -69,7 +69,7 @@ single_expr :
 
 top_level :
     | TOK_KW_LET TOK_NAME TOK_COLON expr { cur_span (), AxiomDecl ($2, $4) }
-    | TOK_KW_LET TOK_NAME TOK_EQ    expr { cur_span (), Definition($2, $4) }
+    | TOK_KW_LET TOK_NAME TOK_EQ    expr { cur_span (), Definition($2, None, $4) }
     | error                              { error "expecting top level clause" }
 ;
 

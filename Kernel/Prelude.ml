@@ -48,7 +48,4 @@ let snd-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0
 
 let prelude_program = Parser.program Lexer.token (Lexing.from_string prelude_src)
 
-let make_globals size =
-    let globals = Hashtbl.create (size + List.length prelude_program) in
-    List.iter (fun top -> ignore @@ Elaborate.check_top_level globals top) prelude_program;
-    globals
+let load g = ignore (Elaborate.check_program g prelude_program)

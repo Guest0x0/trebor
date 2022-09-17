@@ -83,18 +83,18 @@ let error_equal globals err1 err2 =
 
 
 let wrong_type ctx typ err_ctx =
-    let g = Hashtbl.create 0 in
+    let g = new Unification.context in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
     let ctxC, elab_ctx = Elaborate.check_context g ctx in
     Syntax.Error.WrongType(ctxC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
-    let globals = Hashtbl.create 0 in
+    let g = new Unification.context in
     let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
-    let ctxC, elab_ctx = Elaborate.check_context globals ctx in
+    let ctxC, elab_ctx = Elaborate.check_context g ctx in
     Syntax.Error.TypeMismatch( ctxC
-                             , core_of_string globals elab_ctx expected
-                             , core_of_string globals elab_ctx actual
+                             , core_of_string g elab_ctx expected
+                             , core_of_string g elab_ctx actual
                              , err_ctx )
 
 
@@ -107,7 +107,8 @@ let register_test name expectation src =
 
 let run_test (name, expectation, src) =
     let open Format in
-    let g = Prelude.make_globals 37 in
+    let g = new Unification.context in
+    Prelude.load g;
     let result =
         try Ok(Elaborate.check_program g (parse_string ~filename:name src)) with
           exn -> Error exn

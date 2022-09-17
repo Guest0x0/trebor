@@ -5,8 +5,30 @@ open Value
 exception RuntimeError
 
 
+let apply vf va =
+    match vf with
+    | Fun  (_, f) -> f va
+    | Stuck(h, e) -> Stuck(h, App(e, va))
+    | _           -> raise RuntimeError
 
-let rec shift level = function
+
+let project vpair field =
+    match vpair, field with
+    | Pair(fst, _), `Fst  -> fst
+    | Pair(_, snd), `Snd  -> snd
+    | Stuck(h, e) , field -> Stuck(h, Proj(e, field))
+    | _                   -> raise RuntimeError
+
+
+let rec eliminate headv = function
+    | EmptyElim          -> headv
+    | App(elim', argv)   -> apply (eliminate headv elim') argv
+    | Proj(elim', field) -> project (eliminate headv elim') field
+
+
+
+let rec shift level value =
+    match value with
     | Stuck (head, elim) -> Stuck (shift_head level head, shift_elim level elim)
     | Type  ulevel       -> Type  (ulevel + level)
     | TyFun (name, a, b) -> TyFun (name, shift level a, shift_func level b)
@@ -25,6 +47,8 @@ and shift_head level = function
             ; lhs     = shift level lhs
             ; rhs     = shift level rhs
             ; eq      = lazy(shift level (Lazy.force eq)) }
+    | Meta(level', meta) ->
+        Meta(level' + level, meta)
 
 and shift_elim level = function
     | EmptyElim as elim  -> elim
@@ -34,20 +58,6 @@ and shift_elim level = function
 and shift_func level f = fun v ->
     v |> shift (- level) |> f |> shift level
 
-
-let apply vf va =
-    match vf with
-    | Fun  (_, f) -> f va
-    | Stuck(h, e) -> Stuck(h, App(e, va))
-    | _           -> raise RuntimeError
-
-
-let project vpair field =
-    match vpair, field with
-    | Pair(fst, _), `Fst  -> fst
-    | Pair(_, snd), `Snd  -> snd
-    | Stuck(h, e) , field -> Stuck(h, Proj(e, field))
-    | _                   -> raise RuntimeError
 
 
 
@@ -103,11 +113,25 @@ let rec coerce ulevel coerced lhs rhs eq =
 
 
 
+let rec force g value =
+    match value with
+    | Stuck(Meta(level, m), elim) ->
+        begin match g#find_meta m with
+        | Solved v ->
+            let headv = if level = 0 then v else shift level v in
+            force g (eliminate headv elim)
+        | _  ->
+            value
+        end
+    | _ ->
+        value
+
+
 
 let rec eval g env core =
     match core with
     | Core.TopVar name ->
-        begin match Hashtbl.find g name with
+        begin match g#find_global name with
         | AxiomDecl _          -> Stuck(TopVar(0, name), EmptyElim)
         | Definition(_, value) -> value
         end
@@ -131,3 +155,5 @@ let rec eval g env core =
     | Core.Coe { ulevel; coerced; lhs; rhs; eq } ->
         coerce ulevel (eval g env coerced) (eval g env lhs) (eval g env rhs)
             (lazy(eval g env @@ Lazy.force eq))
+
+    | Core.Meta(_, meta) -> Stuck(Meta(0, meta), EmptyElim)

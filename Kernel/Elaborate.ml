@@ -58,7 +58,7 @@ let rec infer g ctx expr =
             ( typ
             , Core.Local idx )
         | exception Not_found ->
-            match Hashtbl.find g name with
+            match g#find_global name with
             | Value.(AxiomDecl typ | Definition(typ, _)) ->
                 ( typ
                 , Core.TopVar name )
@@ -201,7 +201,7 @@ and check err_ctx g ctx typ expr =
             | Some ann ->
                 let _, annC = check_typ g ctx ann in
                 let annV = Eval.eval g ctx.venv annC in
-                begin match Unification.subtyp g ctx.level ctx.tenv param_typ annV with
+                begin match g#subtyp ctx.level ctx.tenv param_typ annV with
                 | () ->
                     annV
                 | exception Unification.UnificationFailure ->
@@ -222,7 +222,7 @@ and check err_ctx g ctx typ expr =
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
-        begin match Unification.subtyp g ctx.level ctx.tenv actual_typ typ with
+        begin match g#subtyp ctx.level ctx.tenv actual_typ typ with
         | () ->
             exprC
         | exception Unification.UnificationFailure ->
@@ -253,31 +253,36 @@ let rec check_context g ctx =
 let check_top_level g (span, top) =
     match top with
     | Surface.AxiomDecl(name, typ) ->
-        begin match Hashtbl.find_opt g name with
-        | Some _ -> raise (Error.Error (span, RedeclareVar name))
-        | None   -> ()
-        end;
         let _, typC = check_typ g empty_ctx typ in
-        Hashtbl.add g name (Value.AxiomDecl(Eval.eval g [] typC));
+        begin try g#add_global_decl name (Eval.eval g [] typC) with
+        | Context.RedefineGlobal -> raise (Error.Error (span, RedeclareVar name))
+        end;
         Core.AxiomDecl(name, typC)
 
-    | Surface.Definition(name, def) ->
-        let typ, defC =
-            match Hashtbl.find_opt g name with
-            | Some(Value.AxiomDecl typ) ->
-                (typ, check "global definition" g empty_ctx typ def)
-            | Some(Value.Definition _)  ->
-                raise (Error.Error (span, RedefineVar name))
+    | Surface.Definition(name, typ, def) ->
+        let typV, typC, defC =
+            match typ with
+            | Some typ ->
+                let _, typC = check_typ g empty_ctx typ in
+                let typV = Eval.eval g [] typC in
+                (typV, typC, check "global definition" g empty_ctx typV def)
             | None ->
-                infer g empty_ctx def
+                let typV, defC = infer g empty_ctx def in
+                let _, typC = Quote.typ_to_core g 0 [] typV in
+                (typV, typC, defC)
         in
-        Hashtbl.add g name (Value.Definition(typ, Eval.eval g [] defC));
-        Core.Definition(name, snd (Quote.typ_to_core g 0 [] typ), defC)
+        g#add_global_def name typV (Eval.eval g [] defC);
+        Core.Definition(name, typC, defC)
 
 
 
 let rec check_program g = function
     | []          -> []
+    | (span1, Surface.AxiomDecl(name1, typ))
+        :: (span2, Surface.Definition(name2, None, def))
+        :: tops when name1 = name2 ->
+        let span = { lhs = span1.lhs; rhs = span2.rhs } in
+        check_program g ((span, Surface.Definition(name1, Some typ, def)) :: tops)
     | top :: tops ->
         let c_top = check_top_level g top in
         c_top :: check_program g tops
