@@ -33,6 +33,8 @@ module Value = struct
         | Solved of value
 
 
+    type env = (string * value * [`Bound | `Defined]) list
+
 
     type top_level =
         | AxiomDecl  of value
@@ -70,6 +72,8 @@ module Core = struct
 
         | Meta   of string * meta
 
+
+    type env = (string * expr * [`Bound | `Defined]) list
 
 
     type top_level =
@@ -110,6 +114,9 @@ module Surface = struct
         | Hole
 
 
+    type env = (string * expr * [`Bound | `Defined]) list
+
+
     type top_level =
         | AxiomDecl  of string * expr
         | Definition of string * expr option * expr
@@ -124,8 +131,8 @@ module Error = struct
         | SyntaxError  of string
         | UnboundVar   of string
         | CannotInfer  of string
-        | WrongType    of (string * Core.expr) list * Core.expr * string
-        | TypeMismatch of (string * Core.expr) list * Core.expr * Core.expr * string
+        | WrongType    of Core.env * Core.expr * string
+        | TypeMismatch of Core.env * Core.expr * Core.expr * string
         | RedeclareVar of string
         | RedefineVar  of string
 

@@ -160,11 +160,11 @@ let pp_core_top_level verbose fmt top =
             name (pp_core ~verbose []) def
 
 
-let pp_context verbose fmt ctx =
+let pp_env verbose fmt ctx =
     let rec loop = function
         | [] ->
             []
-        | (name, typ) :: ctx' ->
+        | (name, typ, _) :: ctx' ->
             let names = loop ctx' in
             if names <> [] then
                 fprintf fmt "@ ";
@@ -187,16 +187,16 @@ let pp_error verbose fmt err =
     | Error.SyntaxError msg -> fprintf fmt "syntax error: %s" msg
     | Error.UnboundVar name -> fprintf fmt "unbound variable %s" name
     | Error.CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
-    | Error.WrongType(ctx, typ, expected) ->
+    | Error.WrongType(env, typ, expected) ->
         fprintf fmt "@[<v>expected: %s@ found: %a@ "
-            expected (pp_core ~verbose @@ List.map fst ctx) typ;
-        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
-    | Error.TypeMismatch(ctx, expected, actual, err_ctx) ->
-        let names = List.map fst ctx in
+            expected (pp_core ~verbose @@ List.map (fun (name, _, _) -> name) env) typ;
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_env verbose) env
+    | Error.TypeMismatch(env, expected, actual, err_ctx) ->
+        let names = List.map (fun (name, _, _) -> name) env in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
         fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
         fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;
-        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_context verbose) ctx
+        fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_env verbose) env
     | Error.RedeclareVar name -> fprintf fmt "re-declaring %s" name
     | Error.RedefineVar  name -> fprintf fmt "re-defining %s" name
 

@@ -4,6 +4,24 @@ open Value
 open Eval
 
 
+
+let abstract_env env ret_typ =
+    List.fold_left
+        (fun typ (_, param_typ, kind) ->
+                    match kind with
+                    | `Defined -> typ
+                    | `Bound   -> Value.TyFun("", param_typ, Fun.const typ))
+        ret_typ env
+
+let apply_env f env =
+    let args =
+        env
+        |> List.mapi (fun lvl (_, _, kind) -> kind, Value.stuck_local lvl)
+        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
+    in
+    List.fold_left Eval.apply f args
+
+
 let rec make_fun n body =
     if n = 0
     then body
@@ -31,12 +49,12 @@ let rec decompose_pair g level env meta elim =
         let typ, meta', elim' = decompose_pair g level env meta elim' in
         begin match typ with
         | TyPair(_, fst_typ, snd_typ) ->
-            let fst_meta = g#fresh_meta (Eval.abstract_env env fst_typ) in
+            let fst_meta = g#fresh_meta (abstract_env env fst_typ) in
             let fstV = Stuck(Meta("", fst_meta), elim') in
             let snd_typ = snd_typ fstV in
-            let snd_meta = g#fresh_meta (Eval.abstract_env env snd_typ) in
+            let snd_meta = g#fresh_meta (abstract_env env snd_typ) in
             let sndV = Stuck(Meta("", snd_meta), elim') in
-            g#solve_meta meta' (make_funV level @@ Pair(fstV, sndV));
+            g#solve_meta meta' (abstract_env env @@ Pair(fstV, sndV));
             begin match field with
             | `Fst -> (fst_typ, fst_meta, elim')
             | `Snd -> (snd_typ, snd_meta, elim')
@@ -152,11 +170,11 @@ class context = object(self)
     val mutable progressed = false
 
 
-    method subtyp level env v1 v2 =
+    method subtyp level (env : Value.env) v1 v2 =
         try self#unify_typ_aux `Subtyp level env v1 v2
         with CannotSolveYet -> ()
 
-    method unify_typ level env v1 v2 =
+    method unify_typ level (env : Value.env) v1 v2 =
         try self#unify_typ_aux `Equal level env v1 v2
         with CannotSolveYet -> ()
 
@@ -189,7 +207,8 @@ class context = object(self)
 
         | TyFun(name, a, b), f1, f2 ->
             let var = stuck_local level in
-            self#unify_value (level + 1) ((name, a) :: env) (b var) (apply f1 var) (apply f2 var)
+            self#unify_value (level + 1) ((name, a, `Bound) :: env) (b var)
+                (apply f1 var) (apply f2 var)
 
         | TyPair(_, a, b), p1, p2 ->
             let fst1 = project p1 `Fst in
@@ -232,7 +251,8 @@ class context = object(self)
             let (AxiomDecl typ | Definition(typ, _)) = self#find_global name1 in
             typ
         | Local lvl1, Local lvl2 when lvl1 = lvl2 ->
-            snd (List.nth env (level - lvl1 - 1))
+            let (_, typ, _) = List.nth env (level - lvl1 - 1) in
+            typ 
         | Coe coe1, Coe coe2 when coe1.ulevel = coe2.ulevel ->
             self#unify_value level env (Type coe1.ulevel) coe1.lhs coe2.lhs;
             self#unify_value level env (Type coe1.ulevel) coe1.rhs coe2.rhs;
@@ -274,12 +294,12 @@ class context = object(self)
         | TyFun (name, a1, b1), TyFun (_, a2, b2) ->
             self#unify_typ_aux mode level env a2 a1;
             let var = stuck_local level in
-            self#unify_typ_aux mode (level + 1) ((name, a2) :: env) (b1 var) (b2 var)
+            self#unify_typ_aux mode (level + 1) ((name, a2, `Bound) :: env) (b1 var) (b2 var)
 
         | TyPair(name, a1, b1), TyPair(_, a2, b2) ->
             self#unify_typ_aux mode level env a1 a2;
             let var = stuck_local level in
-            self#unify_typ_aux mode (level + 1) ((name, a1) :: env) (b1 var) (b2 var)
+            self#unify_typ_aux mode (level + 1) ((name, a1, `Bound) :: env) (b1 var) (b2 var)
 
         | TyEq((lhs1, lhs_typ1), (rhs1, rhs_typ1))
         , TyEq((lhs2, lhs_typ2), (rhs2, rhs_typ2)) ->

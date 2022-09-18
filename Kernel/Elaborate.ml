@@ -5,7 +5,7 @@ open Eval
 type context =
     { level : int
     ; venv  : Value.value list
-    ; tenv  : (string * Value.value) list }
+    ; tenv  : Value.env }
 
 
 let empty_ctx =
@@ -15,21 +15,21 @@ let empty_ctx =
 
 
 let add_local name typ ?value ctx =
-    let value =
+    let value, kind =
         match value with
-        | Some value -> value
-        | None       -> Value.stuck_local ctx.level
+        | Some value -> value, `Defined
+        | None       -> Value.stuck_local ctx.level, `Bound
     in
     { level = ctx.level + 1
     ; venv  = value :: ctx.venv
-    ; tenv  = (name, typ) :: ctx.tenv }
+    ; tenv  = (name, typ, kind) :: ctx.tenv }
 
 
 let find_local name ctx =
     let rec loop idx = function
         | [] ->
             raise Not_found
-        | (name', typ) :: _ when name = name' ->
+        | (name', typ, _) :: _ when name = name' ->
             idx, typ
         | _ :: rest ->
             loop (idx + 1) rest
@@ -39,12 +39,12 @@ let find_local name ctx =
 
 
 let wrong_type g ctx span typ expected =
-    let ctxC = Quote.env_to_core_ctx g ctx.tenv in
+    let ctxC = Quote.env_to_core g ctx.tenv in
     let _, typC = Quote.typ_to_core g ctx.level ctx.tenv typ in
     raise @@ Error.Error(span, WrongType(ctxC, typC, expected))
 
 let type_mismatch g ctx span expected actual err_ctx =
-    let ctxC = Quote.env_to_core_ctx g ctx.tenv in
+    let ctxC = Quote.env_to_core g ctx.tenv in
     let _, expectedC = Quote.typ_to_core g ctx.level ctx.tenv expected in
     let _, actualC = Quote.typ_to_core g ctx.level ctx.tenv actual in
     raise @@ Error.Error(span, TypeMismatch(ctxC, expectedC, actualC, err_ctx))
@@ -52,15 +52,27 @@ let type_mismatch g ctx span expected actual err_ctx =
 
 
 let abstract_ctx ctx ret_typ =
-    List.fold_left (fun typ (_, param_typ) -> Value.TyFun("", param_typ, Fun.const typ))
+    List.fold_left
+        (fun typ (_, param_typ, kind) ->
+                    match kind with
+                    | `Defined -> typ
+                    | `Bound   -> Value.TyFun("", param_typ, Fun.const typ))
         ret_typ ctx.tenv
 
 let apply_ctxV f ctx =
-    let args = List.init ctx.level Value.stuck_local in
+    let args =
+        ctx.tenv
+        |> List.mapi (fun lvl (_, _, kind) -> kind, Value.stuck_local lvl)
+        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
+    in
     List.fold_left Eval.apply f args
 
 let apply_ctxC f ctx =
-    let args = List.init ctx.level (fun lvl -> Core.Local(ctx.level - lvl - 1)) in
+    let args =
+        ctx.tenv
+        |> List.mapi (fun lvl (_, _, kind) -> kind, Core.Local(ctx.level - lvl - 1))
+        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
+    in
     List.fold_left (fun f a -> Core.App(f, a)) f args
 
 
@@ -262,15 +274,15 @@ and check_typ g ctx expr =
 
 
 
-let rec check_context g ctx =
-    match ctx with
+let rec check_env g env =
+    match env with
     | [] ->
-        [], empty_ctx
-    | (name, typ) :: ctx' ->
-        let ctxC, elab_ctx = check_context g ctx' in
+        empty_ctx, []
+    | (name, typ, kind) :: env' ->
+        let elab_ctx, envC = check_env g env' in
         let _, typC = check_typ g elab_ctx typ in
-        ( (name, typC) :: ctxC
-        , add_local name (Eval.eval g elab_ctx.venv typC) elab_ctx )
+        ( add_local name (Eval.eval g elab_ctx.venv typC) elab_ctx
+        , (name, typC, kind) :: envC )
 
 
 

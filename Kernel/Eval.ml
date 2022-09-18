@@ -2,7 +2,9 @@
 open Syntax
 open Value
 
+
 exception RuntimeError
+exception CannotShiftMeta
 
 
 let apply vf va =
@@ -20,14 +22,7 @@ let project vpair field =
     | _                   -> raise RuntimeError
 
 
-let rec eliminate headv = function
-    | EmptyElim          -> headv
-    | App(elim', argv)   -> apply (eliminate headv elim') argv
-    | Proj(elim', field) -> project (eliminate headv elim') field
 
-
-
-exception CannotShiftMeta
 
 let rec shift level value =
     match value with
@@ -115,6 +110,11 @@ let rec coerce ulevel coerced lhs rhs eq =
 
 
 
+let rec eliminate headv = function
+    | EmptyElim          -> headv
+    | App(elim', argv)   -> apply (eliminate headv elim') argv
+    | Proj(elim', field) -> project (eliminate headv elim') field
+
 let rec force g value =
     match value with
     | Stuck(Meta(_, m), elim) ->
@@ -125,16 +125,6 @@ let rec force g value =
     | _ ->
         value
 
-
-
-
-let abstract_env env ret_typ =
-    List.fold_left (fun typ (_, param_typ) -> TyFun("", param_typ, Fun.const typ))
-        ret_typ env
-
-let apply_env f level =
-    let args = List.init level stuck_local in
-    List.fold_left apply f args
 
 
 let rec eval g env core =

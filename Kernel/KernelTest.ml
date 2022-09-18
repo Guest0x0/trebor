@@ -54,12 +54,12 @@ let rec term_equal tm1 tm2 =
 
 let error_equal globals err1 err2 =
     let open Syntax.Error in
-    let rec context_equal ctx1 ctx2 =
-        match ctx1, ctx2 with
+    let rec env_equal env1 env2 =
+        match env1, env2 with
         | [], [] ->
             true
-        | (name1, typ1) :: ctx1', (name2, typ2) :: ctx2' ->
-            name1 = name2 && term_equal typ1 typ2 && context_equal ctx1' ctx2'
+        | (name1, typ1, _) :: env1', (name2, typ2, _) :: env2' ->
+            name1 = name2 && term_equal typ1 typ2 && env_equal env1' env2'
         | _ ->
             false
     in
@@ -67,14 +67,14 @@ let error_equal globals err1 err2 =
     match err1, err2 with
     | UnboundVar name1, UnboundVar name2 -> name1 = name2
     | CannotInfer ctx1, CannotInfer ctx2 -> ctx1 = ctx2
-    | WrongType(ctx1, typ1, err_ctx1)
-    , WrongType(ctx2, typ2, err_ctx2) ->
-        context_equal ctx1 ctx2
+    | WrongType(env1, typ1, err_ctx1)
+    , WrongType(env2, typ2, err_ctx2) ->
+        env_equal env1 env2
         && term_equal typ1 typ2
         && err_ctx1 = err_ctx2
-    | TypeMismatch(ctx1, expected1, actual1, err_ctx1)
-    , TypeMismatch(ctx2, expected2, actual2, err_ctx2) ->
-        context_equal ctx1 ctx2
+    | TypeMismatch(env1, expected1, actual1, err_ctx1)
+    , TypeMismatch(env2, expected2, actual2, err_ctx2) ->
+        env_equal env1 env2
         && term_equal expected1 expected2
         && term_equal actual1 actual2
         && err_ctx1 = err_ctx2
@@ -84,15 +84,15 @@ let error_equal globals err1 err2 =
 
 let wrong_type ctx typ err_ctx =
     let g = new Unification.context in
-    let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
-    let ctxC, elab_ctx = Elaborate.check_context g ctx in
-    Syntax.Error.WrongType(ctxC, core_of_string g elab_ctx typ, err_ctx)
+    let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
+    let elab_ctx, envC = Elaborate.check_env g env in
+    Syntax.Error.WrongType(envC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
     let g = new Unification.context in
-    let ctx = List.rev_map (fun (name, src) -> (name, expr_of_string src)) ctx in
-    let ctxC, elab_ctx = Elaborate.check_context g ctx in
-    Syntax.Error.TypeMismatch( ctxC
+    let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
+    let elab_ctx, envC = Elaborate.check_env g env in
+    Syntax.Error.TypeMismatch( envC
                              , core_of_string g elab_ctx expected
                              , core_of_string g elab_ctx actual
                              , err_ctx )

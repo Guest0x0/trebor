@@ -12,7 +12,8 @@ let rec value_to_core g level env typ value =
 
     | TyFun(name, a, b), vf ->
         let var = stuck_local level in
-        Core.Fun(name, value_to_core g (level + 1) ((name, a) :: env) (b var) (apply vf var))
+        let bodyV = apply vf var in
+        Core.Fun(name, value_to_core g (level + 1) ((name, a, `Bound) :: env) (b var) bodyV)
 
     | TyPair(_, a, b), vp ->
         let fst = project vp `Fst in
@@ -36,7 +37,8 @@ and head_to_core g level env head =
         else typ, Core.Shift(shift, Core.TopVar name)
     | Local lvl ->
         let idx = level - lvl - 1 in
-        snd (List.nth env idx), Core.Local idx
+        let (_, typ, _) = List.nth env idx in
+        typ, Core.Local idx
     | Coe { ulevel; coerced; lhs; rhs; eq } ->
         ( rhs
         , Core.Coe { ulevel
@@ -82,11 +84,15 @@ and typ_to_core g level env typv =
         ( ulevel + 1, Core.Type ulevel )
     | TyFun(name, a, b) ->
         let ul_a, a_core = typ_to_core g level env a in
-        let ul_b, b_core = typ_to_core g (level + 1) ((name, a) :: env) (b @@ stuck_local level) in
+        let ul_b, b_core =
+            typ_to_core g (level + 1) ((name, a, `Bound) :: env) (b @@ stuck_local level)
+        in
         ( max ul_a ul_b, Core.TyFun(name, a_core, b_core) )
     | TyPair(name, a, b) ->
         let ul_a, a_core = typ_to_core g level env a in
-        let ul_b, b_core = typ_to_core g (level + 1) ((name, a) :: env) (b @@ stuck_local level) in
+        let ul_b, b_core =
+            typ_to_core g (level + 1) ((name, a, `Bound) :: env) (b @@ stuck_local level)
+        in
         ( max ul_a ul_b, Core.TyPair(name, a_core, b_core) )
     | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
         let ul_lhs, lhs_typC = typ_to_core g level env lhs_typ in
@@ -103,14 +109,14 @@ and typ_to_core g level env typv =
         raise RuntimeError
 
 
-let env_to_core_ctx g env =
+let env_to_core g env =
     let rec loop = function
         | [] ->
             (0, [])
-        | (name, typ) :: env' ->
+        | (name, typ, kind) :: env' ->
             let level, core_ctx' = loop env' in
             let _, typC = typ_to_core g level env' typ in
-            (level + 1, (name, typC) :: core_ctx')
+            (level + 1, (name, typC, kind) :: core_ctx')
     in
     snd (loop env)
 
