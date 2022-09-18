@@ -51,13 +51,15 @@ let type_mismatch g ctx span expected actual err_ctx =
 
 
 
-let abstract_ctx ctx ret_typ =
+let abstract_ctx g ctx ret_typ =
+    let _, expr = Quote.typ_to_core g ctx.level ctx.tenv ret_typ in
     List.fold_left
         (fun typ (_, param_typ, kind) ->
                     match kind with
                     | `Defined -> typ
-                    | `Bound   -> Value.TyFun("", param_typ, Fun.const typ))
-        ret_typ ctx.tenv
+                    | `Bound   -> fun env -> Value.TyFun("", param_typ, fun v -> typ (v :: env)))
+        (fun env -> Eval.eval g env expr) ctx.tenv
+    @@ []
 
 let apply_ctxV f ctx =
     let args =
@@ -206,9 +208,9 @@ let rec infer g ctx expr =
         end
 
     | Surface.Hole ->
-        let typ_meta = g#fresh_meta (abstract_ctx ctx (Value.Type 0)) in
+        let typ_meta = g#fresh_meta (abstract_ctx g ctx (Value.Type 0)) in
         let typ = apply_ctxV Value.(Stuck(Meta("", typ_meta), EmptyElim)) ctx in
-        let hole_meta = g#fresh_meta (abstract_ctx ctx typ) in
+        let hole_meta = g#fresh_meta (abstract_ctx g ctx typ) in
         typ, apply_ctxC (Core.Meta("", hole_meta)) ctx
 
 and check err_ctx g ctx typ expr =
@@ -253,7 +255,7 @@ and check err_ctx g ctx typ expr =
         Core.Pair(fstC, sndC)
 
     | typ, Surface.Hole ->
-        let meta = g#fresh_meta (abstract_ctx ctx typ) in
+        let meta = g#fresh_meta (abstract_ctx g ctx typ) in
         apply_ctxC (Core.Meta("", meta)) ctx
 
     | _ ->

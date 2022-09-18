@@ -27,12 +27,14 @@ let rec make_fun n body =
     then body
     else make_fun (n - 1) (Core.Fun("", body))
 
-let rec make_funV n body =
-    if n = 0
-    then body
-    else make_funV (n - 1) (Fun("", Fun.const body))
+let rec abstract_elim elim body =
+    match elim with
+    | EmptyElim     -> body
+    | App(elim', _) -> abstract_elim elim' (Fun("", Fun.const body))
+    | Proj _        -> raise RuntimeError
 
-let rec decompose_pair g level env meta elim =
+
+let rec decompose_pair g meta elim =
     match elim with
     | EmptyElim ->
         begin match g#find_meta meta with
@@ -40,21 +42,21 @@ let rec decompose_pair g level env meta elim =
         | _        -> raise RuntimeError
         end
     | App(elim', arg) ->
-        let typ, meta', elim' = decompose_pair g level env meta elim' in
+        let typ, meta', elim' = decompose_pair g meta elim' in
         begin match typ with
         | TyFun(_, a, b) -> b arg, meta', App(elim', arg)
         | _              -> raise RuntimeError
         end
     | Proj(elim', field) ->
-        let typ, meta', elim' = decompose_pair g level env meta elim' in
+        let typ, meta', elim' = decompose_pair g meta elim' in
         begin match typ with
         | TyPair(_, fst_typ, snd_typ) ->
-            let fst_meta = g#fresh_meta (abstract_env env fst_typ) in
+            let fst_meta = g#fresh_meta (abstract_elim elim' fst_typ) in
             let fstV = Stuck(Meta("", fst_meta), elim') in
             let snd_typ = snd_typ fstV in
-            let snd_meta = g#fresh_meta (abstract_env env snd_typ) in
+            let snd_meta = g#fresh_meta (abstract_elim elim' snd_typ) in
             let sndV = Stuck(Meta("", snd_meta), elim') in
-            g#solve_meta meta' (abstract_env env @@ Pair(fstV, sndV));
+            g#solve_meta meta' (abstract_elim elim' @@ Pair(fstV, sndV));
             begin match field with
             | `Fst -> (fst_typ, fst_meta, elim')
             | `Snd -> (snd_typ, snd_meta, elim')
@@ -135,7 +137,7 @@ and rename_func g m ren f =
 and rename_head g m ren = function
     | Local lvl ->
         begin match List.assoc lvl ren.map with
-        | value               -> Quote.Simple.value_to_core ren.dom value
+        | value               -> Quote.Simple.value_to_core ren.cod value
         | exception Not_found -> raise CannotSolveYet
         end
     | Coe coe ->
@@ -226,7 +228,7 @@ class context = object(self)
         | Stuck _, Stuck(Meta(_, meta), elim), v
         | Stuck _, v, Stuck(Meta(_, meta), elim) ->
             begin try
-                let _, meta, elim = decompose_pair self level env meta elim in
+                let _, meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
                 let body = rename_value self meta ren v in
                 let sol = make_fun ren.cod body in
@@ -315,10 +317,9 @@ class context = object(self)
         | Stuck(Meta(_, meta), elim), v
         | v, Stuck(Meta(_, meta), elim) ->
             begin try
-                let _, meta, elim = decompose_pair self level env meta elim in
+                let _, meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
-                let body = rename_value self meta ren v in
-                let sol = make_fun ren.cod body in
+                let sol = make_fun ren.cod (rename_value self meta ren v) in
                 self#solve_meta meta (Eval.eval self [] sol);
                 progressed <- true
             with CannotSolveYet ->

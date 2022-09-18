@@ -425,6 +425,17 @@ let id = fun (A : Type) (a : A) -> a
 let test = id _ Type
 " ;;
 
+register_test "elab.hole.type-from-term" None "
+let eq : forall (A : Type) (a : A) -> a = _
+let eq = eq-refl
+" ;;
+
+register_test "elab.hole.term-from-type" None "
+let my-refl : forall (A : Type) (a : A) -> a = a
+let my-refl = fun A a -> eq-refl _ _
+" ;;
+
+
 register_test "unify.function" None "
 let apply = fun (A B : Type 1) (f : A -> B) (x : A) -> f x
 let id = fun (A : Type) (a : A) -> a
