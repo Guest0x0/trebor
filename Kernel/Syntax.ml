@@ -20,7 +20,7 @@ module Value = struct
               ; lhs     : value
               ; rhs     : value
               ; eq      : value Lazy.t }
-        | Meta of int * meta
+        | Meta of string * meta
 
     and elimination =
         | EmptyElim
@@ -29,7 +29,7 @@ module Value = struct
 
 
     type meta_info =
-        | Free   of string * value
+        | Free   of value
         | Solved of value
 
 
@@ -106,6 +106,8 @@ module Surface = struct
 
         | TyEq   of expr * expr
         | Coe    of expr * expr
+
+        | Hole
 
 
     type top_level =

@@ -46,10 +46,10 @@ and head_to_core g level env head =
                    ; eq      = lazy(value_to_core g level env
                              (TyEq((lhs, Type ulevel), (rhs, Type ulevel)))
                              (Lazy.force eq)) } )
-    | Meta(shift, meta) ->
+    | Meta(name, meta) ->
         begin match g#find_meta meta with
-        | Free(name, typ) -> typ, Core.Shift(shift, Core.Meta(name, meta))
-        | Solved _     -> raise RuntimeError
+        | Free typ  -> typ, Core.Meta(name, meta)
+        | Solved _  -> raise RuntimeError
         end
 
 
@@ -113,3 +113,47 @@ let env_to_core_ctx g env =
             (level + 1, (name, typC) :: core_ctx')
     in
     snd (loop env)
+
+
+
+module Simple = struct
+    let rec value_to_core level = function
+        | Stuck(head, elim) -> elim_to_core level (head_to_core level head) elim
+        | Type ulevel       -> Core.Type ulevel
+
+        | TyFun(name, a, b) ->
+            Core.TyFun( name
+                      , value_to_core level a
+                      , value_to_core (level + 1) (b @@ stuck_local level) )
+        | Fun(name, f) ->
+            Core.Fun(name, value_to_core (level + 1) (f @@ stuck_local level))
+
+        | TyPair(name, a, b) ->
+            Core.TyPair( name
+                       , value_to_core level a
+                       , value_to_core (level + 1) (b @@ stuck_local level) )
+        | Pair(fst, snd) ->
+            Core.Pair(value_to_core level fst, value_to_core level snd)
+
+        | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
+            Core.TyEq( (value_to_core level lhs, value_to_core level lhs_typ)
+                     , (value_to_core level rhs, value_to_core level rhs_typ) )
+
+    and head_to_core level = function
+        | TopVar(0, name) -> Core.TopVar name
+        | TopVar(s, name) -> Core.Shift(s, Core.TopVar name)
+        | Local lvl       -> Core.Local(level - lvl - 1)
+        | Coe { ulevel; coerced; lhs; rhs; eq } ->
+            Core.Coe { ulevel
+                     ; coerced = value_to_core level coerced
+                     ; lhs     = value_to_core level lhs
+                     ; rhs     = value_to_core level rhs
+                     ; eq      = lazy(value_to_core level @@ Lazy.force eq) }
+
+        | Meta(name, meta) -> Core.Meta(name, meta)
+
+    and elim_to_core level headC = function
+        | EmptyElim       -> headC
+        | App(elim', arg) -> Core.App(elim_to_core level headC elim', value_to_core level arg)
+        | Proj(elim', f)  -> Core.Proj(elim_to_core level headC elim', f)
+end

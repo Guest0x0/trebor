@@ -420,6 +420,20 @@ let eq = ~~~eq-refl (Type 2) (Type 1)
 
 
 
+register_test "elab.hole.basic" None "
+let id = fun (A : Type) (a : A) -> a
+let test = id _ Type
+" ;;
+
+register_test "unify.function" None "
+let apply = fun (A B : Type 1) (f : A -> B) (x : A) -> f x
+let id = fun (A : Type) (a : A) -> a
+
+let test =
+    let f = _ : (Type -> Type) in
+    fun (A : Type) (a : A) -> id (apply Type Type f A) a
+" ;;
+
 
 register_test "examples.type-formers-resp-eq" None "
 let ap : forall (A B : Type 0) (a1 a2 : A) (f : A -> B) -> a1 = a2 -> f a1 = f a2

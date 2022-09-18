@@ -99,8 +99,10 @@ let rec pp_core ctx fmt core =
         then fprintf fmt "%a@]" (pp_core { ctx with prec = prec_coe + 1 }) (Lazy.force eq)
         else fprintf fmt "_@]"
 
-    | Core.Meta(name, _) ->
-        fprintf fmt "?%s" name
+    | Core.Meta(name, meta) ->
+        if name = ""
+        then fprintf fmt "?%d" meta
+        else fprintf fmt "?%s" name
 
     | _ ->
         fprintf fmt "(%a)" (pp_core { ctx with prec = 0 }) core

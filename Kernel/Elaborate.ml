@@ -50,6 +50,20 @@ let type_mismatch g ctx span expected actual err_ctx =
     raise @@ Error.Error(span, TypeMismatch(ctxC, expectedC, actualC, err_ctx))
 
 
+
+let abstract_ctx ctx ret_typ =
+    List.fold_left (fun typ (_, param_typ) -> Value.TyFun("", param_typ, Fun.const typ))
+        ret_typ ctx.tenv
+
+let apply_ctxV f ctx =
+    let args = List.init ctx.level Value.stuck_local in
+    List.fold_left Eval.apply f args
+
+let apply_ctxC f ctx =
+    let args = List.init ctx.level (fun lvl -> Core.Local(ctx.level - lvl - 1)) in
+    List.fold_left (fun f a -> Core.App(f, a)) f args
+
+
 let rec infer g ctx expr =
     match expr.Surface.shape with
     | Surface.Var name ->
@@ -179,6 +193,12 @@ let rec infer g ctx expr =
             wrong_type g ctx expr.span typV "equality"
         end
 
+    | Surface.Hole ->
+        let typ_meta = g#fresh_meta (abstract_ctx ctx (Value.Type 0)) in
+        let typ = apply_ctxV Value.(Stuck(Meta("", typ_meta), EmptyElim)) ctx in
+        let hole_meta = g#fresh_meta (abstract_ctx ctx typ) in
+        typ, apply_ctxC (Core.Meta("", hole_meta)) ctx
+
 and check err_ctx g ctx typ expr =
     match typ, expr.shape with
     | _, Surface.Let((name, ann, rhs), body) ->
@@ -220,6 +240,10 @@ and check err_ctx g ctx typ expr =
         let sndC = check err_ctx g ctx (snd_typ fstV) snd in
         Core.Pair(fstC, sndC)
 
+    | typ, Surface.Hole ->
+        let meta = g#fresh_meta (abstract_ctx ctx typ) in
+        apply_ctxC (Core.Meta("", meta)) ctx
+
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
         begin match g#subtyp ctx.level ctx.tenv actual_typ typ with
@@ -254,6 +278,8 @@ let check_top_level g (span, top) =
     match top with
     | Surface.AxiomDecl(name, typ) ->
         let _, typC = check_typ g empty_ctx typ in
+        g#solve_all;
+        g#check_metas;
         begin try g#add_global_decl name (Eval.eval g [] typC) with
         | Context.RedefineGlobal -> raise (Error.Error (span, RedeclareVar name))
         end;
@@ -271,6 +297,8 @@ let check_top_level g (span, top) =
                 let _, typC = Quote.typ_to_core g 0 [] typV in
                 (typV, typC, defC)
         in
+        g#solve_all;
+        g#check_metas;
         g#add_global_def name typV (Eval.eval g [] defC);
         Core.Definition(name, typC, defC)
 

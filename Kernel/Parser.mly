@@ -24,6 +24,7 @@ let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 %token TOK_COMMA TOK_DOT
 %token TOK_EQ
 %token TOK_COLON TOK_COLON_GT
+%token TOK_UNDERSCORE
 
 %token<string> TOK_NAME
 %token<int> TOK_INT
@@ -143,6 +144,9 @@ atom_expr :
           | 1 -> mk_expr @@ Proj($1, `Fst)
           | 2 -> mk_expr @@ Proj($1, `Snd)
           | _ -> failwith "invalid field of pair" }
+
+    | TOK_UNDERSCORE
+        { mk_expr Hole }
 
     | TOK_LPAREN expr TOK_RPAREN
         { $2 }

@@ -27,6 +27,8 @@ let rec eliminate headv = function
 
 
 
+exception CannotShiftMeta
+
 let rec shift level value =
     match value with
     | Stuck (head, elim) -> Stuck (shift_head level head, shift_elim level elim)
@@ -47,8 +49,8 @@ and shift_head level = function
             ; lhs     = shift level lhs
             ; rhs     = shift level rhs
             ; eq      = lazy(shift level (Lazy.force eq)) }
-    | Meta(level', meta) ->
-        Meta(level' + level, meta)
+    | Meta _ ->
+        raise CannotShiftMeta
 
 and shift_elim level = function
     | EmptyElim as elim  -> elim
@@ -115,17 +117,24 @@ let rec coerce ulevel coerced lhs rhs eq =
 
 let rec force g value =
     match value with
-    | Stuck(Meta(level, m), elim) ->
+    | Stuck(Meta(_, m), elim) ->
         begin match g#find_meta m with
-        | Solved v ->
-            let headv = if level = 0 then v else shift level v in
-            force g (eliminate headv elim)
-        | _  ->
-            value
+        | Solved v -> force g (eliminate v elim)
+        | _        -> value
         end
     | _ ->
         value
 
+
+
+
+let abstract_env env ret_typ =
+    List.fold_left (fun typ (_, param_typ) -> TyFun("", param_typ, Fun.const typ))
+        ret_typ env
+
+let apply_env f level =
+    let args = List.init level stuck_local in
+    List.fold_left apply f args
 
 
 let rec eval g env core =
@@ -156,4 +165,4 @@ let rec eval g env core =
         coerce ulevel (eval g env coerced) (eval g env lhs) (eval g env rhs)
             (lazy(eval g env @@ Lazy.force eq))
 
-    | Core.Meta(_, meta) -> Stuck(Meta(0, meta), EmptyElim)
+    | Core.Meta(name, meta) -> Stuck(Meta(name, meta), EmptyElim)

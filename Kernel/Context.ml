@@ -3,10 +3,12 @@ open Syntax
 
 
 
+exception RedefineGlobal
+exception UnsolvedMeta of meta
+
+
 
 let garbage = Value.Solved(Value.Type 0)
-
-exception RedefineGlobal
 
 class context = object(self)
     val globals : (string, Value.top_level) Hashtbl.t = Hashtbl.create 42
@@ -40,12 +42,20 @@ class context = object(self)
         metas.(meta) <- Solved value
 
 
-    method fresh_meta name typ =
+    method fresh_meta typ =
         if meta_count = Array.length metas then
             metas <- Array.init (2 * meta_count)
                     (fun i -> if i < meta_count then metas.(i) else garbage);
         let meta = meta_count in
-        metas.(meta) <- Free(name, typ);
+        metas.(meta) <- Free typ;
         meta_count <- meta_count + 1;
         meta
+
+
+    method check_metas =
+        metas |> Array.iteri begin fun meta info ->
+            match info with
+            | Value.Free _   -> raise (UnsolvedMeta meta)
+            | Value.Solved _ -> ()
+        end
 end
