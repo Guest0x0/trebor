@@ -445,6 +445,57 @@ let test =
     fun (A : Type) (a : A) -> id (apply Type Type f A) a
 " ;;
 
+register_test "unify.let" None "
+let apply = fun (A B : Type 1) (f : A -> B) (x : A) -> f x
+let id = fun (A : Type) (a : A) -> a
+
+let test = fun (A : Type) ->
+    let T = _ : Type in
+    fun (a : A) -> id T a
+" ;;
+
+register_test "unify.meta-is-pair.arg-then-pair" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test = fun (A : Type) ->
+    let p = _ : (exists (B : Type) -> Type) in
+    fun (a : A) -> (id p.1 a, id p.2 a)
+" ;;
+
+register_test "unify.meta-is-pair.pair-then-arg" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test =
+    let p = _ : (exists (B : Type -> Type) -> Type -> Type) in
+    fun (A : Type) (a : A) -> (id (p.1 A) a, id (p.2 A) a)
+" ;;
+
+
+register_test "unify.pair-applied-to-meta.1" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test =
+    let p = _ : ((exists (B : Type) -> Type) -> Type) in
+    fun (A B : Type) (a : A) -> id (p (A, B)) a
+" ;;
+
+register_test "unify.pair-applied-to-meta.2" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test =
+    let p = _ : ((exists (B : Type) -> Type) -> Type) in
+    fun (A B : Type) (b : B) -> id (p (A, B)) b
+" ;;
+
+register_test "unify.pair-applied-to-meta.3" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test = fun (A : Type) ->
+    let p = _ : ((exists (a : A) -> A -> Type) -> Type) in
+    fun (B : A -> Type) (a : A) (b : B a) -> id (p (a, B)) b
+" ;;
+
+
 
 register_test "examples.type-formers-resp-eq" None "
 let ap : forall (A B : Type 0) (a1 a2 : A) (f : A -> B) -> a1 = a2 -> f a1 = f a2

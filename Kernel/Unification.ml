@@ -5,61 +5,56 @@ open Eval
 
 
 
-let abstract_env env ret_typ =
-    List.fold_left
-        (fun typ (_, param_typ, kind) ->
-                    match kind with
-                    | `Defined -> typ
-                    | `Bound   -> Value.TyFun("", param_typ, Fun.const typ))
-        ret_typ env
-
-let apply_env f env =
-    let args =
-        env
-        |> List.mapi (fun lvl (_, _, kind) -> kind, Value.stuck_local lvl)
-        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
-    in
-    List.fold_left Eval.apply f args
-
-
 let rec make_fun n body =
     if n = 0
     then body
     else make_fun (n - 1) (Core.Fun("", body))
 
-let rec abstract_elim elim body =
-    match elim with
-    | EmptyElim     -> body
-    | App(elim', _) -> abstract_elim elim' (Fun("", Fun.const body))
-    | Proj _        -> raise RuntimeError
+let abstract_elim g elim body =
+    let rec loop level elim =
+        match elim with
+        | EmptyElim     -> Quote.Simple.value_to_core level body
+        | App(elim', _) -> Core.Fun("", loop (level + 1) elim')
+        | Proj _        -> raise RuntimeError
+    in
+    Eval.eval g [] (loop 0 elim)
+
+let env_to_funtyp g level env body =
+    let rec loop level env body =
+        match env with
+        | []          -> body
+        | typ :: env' -> loop (level - 1) env' @@ Core.TyFun("", Quote.Simple.value_to_core level typ, body)
+    in
+    loop level env (Quote.Simple.value_to_core level body)
+    |> Eval.eval g []
 
 
-let rec decompose_pair g meta elim =
+let rec decompose_pair g level meta elim =
     match elim with
     | EmptyElim ->
         begin match g#find_meta meta with
-        | Free typ -> typ, meta, elim
+        | Free typ -> typ, [], meta, elim
         | _        -> raise RuntimeError
         end
     | App(elim', arg) ->
-        let typ, meta', elim' = decompose_pair g meta elim' in
+        let typ, env, meta', elim' = decompose_pair g level meta elim' in
         begin match typ with
-        | TyFun(_, a, b) -> b arg, meta', App(elim', arg)
+        | TyFun(_, a, b) -> b arg, a :: env, meta', App(elim', arg)
         | _              -> raise RuntimeError
         end
     | Proj(elim', field) ->
-        let typ, meta', elim' = decompose_pair g meta elim' in
+        let typ, env, meta', elim' = decompose_pair g level meta elim' in
         begin match typ with
         | TyPair(_, fst_typ, snd_typ) ->
-            let fst_meta = g#fresh_meta (abstract_elim elim' fst_typ) in
+            let fst_meta = g#fresh_meta (env_to_funtyp g level env fst_typ) in
             let fstV = Stuck(Meta("", fst_meta), elim') in
             let snd_typ = snd_typ fstV in
-            let snd_meta = g#fresh_meta (abstract_elim elim' snd_typ) in
+            let snd_meta = g#fresh_meta (env_to_funtyp g level env snd_typ) in
             let sndV = Stuck(Meta("", snd_meta), elim') in
-            g#solve_meta meta' (abstract_elim elim' @@ Pair(fstV, sndV));
+            g#solve_meta meta' (abstract_elim g elim' @@ Pair(fstV, sndV));
             begin match field with
-            | `Fst -> (fst_typ, fst_meta, elim')
-            | `Snd -> (snd_typ, snd_meta, elim')
+            | `Fst -> (fst_typ, env, fst_meta, elim')
+            | `Snd -> (snd_typ, env, snd_meta, elim')
             end
         | _ ->
             raise RuntimeError
@@ -228,7 +223,7 @@ class context = object(self)
         | Stuck _, Stuck(Meta(_, meta), elim), v
         | Stuck _, v, Stuck(Meta(_, meta), elim) ->
             begin try
-                let _, meta, elim = decompose_pair self meta elim in
+                let _, _, meta, elim = decompose_pair self level meta elim in
                 let ren = elim_to_renaming level elim in
                 let body = rename_value self meta ren v in
                 let sol = make_fun ren.cod body in
@@ -317,7 +312,7 @@ class context = object(self)
         | Stuck(Meta(_, meta), elim), v
         | v, Stuck(Meta(_, meta), elim) ->
             begin try
-                let _, meta, elim = decompose_pair self meta elim in
+                let _, _, meta, elim = decompose_pair self level meta elim in
                 let ren = elim_to_renaming level elim in
                 let sol = make_fun ren.cod (rename_value self meta ren v) in
                 self#solve_meta meta (Eval.eval self [] sol);
