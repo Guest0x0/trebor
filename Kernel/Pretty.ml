@@ -199,6 +199,18 @@ let pp_error verbose fmt err =
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_env verbose) env
     | Error.RedeclareVar name -> fprintf fmt "re-declaring %s" name
     | Error.RedefineVar  name -> fprintf fmt "re-defining %s" name
+    | Error.UnsolvedMeta metas ->
+        let pp_entry fmt (meta, info) =
+            match info with
+            | Value.Free typ ->
+                fprintf fmt "?%d : %a" meta
+                    (pp_core ~verbose []) (Quote.Simple.value_to_core 0 typ)
+            | Value.Solved value ->
+                fprintf fmt "?%d := %a" meta
+                    (pp_core ~verbose []) (Quote.Simple.value_to_core 0 value)
+        in
+        fprintf fmt "@[<v2>unsolved meta:@ %a@]"
+            (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ ") pp_entry) metas
 
 
 let pp_exception verbose fmt exn =

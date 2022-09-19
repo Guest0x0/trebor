@@ -292,8 +292,10 @@ let check_top_level g (span, top) =
     match top with
     | Surface.AxiomDecl(name, typ) ->
         let _, typC = check_typ g empty_ctx typ in
-        g#solve_all;
-        g#check_metas;
+        begin try g#solve_all; g#check_metas
+        with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
+            raise @@ Error.Error(span, Error.UnsolvedMeta g#dump_metas)
+        end;
         begin try g#add_global_decl name (Eval.eval g [] typC) with
         | Context.RedefineGlobal -> raise (Error.Error (span, RedeclareVar name))
         end;
@@ -311,8 +313,10 @@ let check_top_level g (span, top) =
                 let _, typC = Quote.typ_to_core g 0 [] typV in
                 (typV, typC, defC)
         in
-        g#solve_all;
-        g#check_metas;
+        begin try g#solve_all; g#check_metas
+        with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
+            raise @@ Error.Error(span, Error.UnsolvedMeta g#dump_metas)
+        end;
         g#add_global_def name typV (Eval.eval g [] defC);
         Core.Definition(name, typC, defC)
 

@@ -14,4 +14,5 @@ class context : object
     method fresh_meta : Value.value -> meta
 
     method check_metas : unit
+    method dump_metas  : (meta * Value.meta_info) list
 end

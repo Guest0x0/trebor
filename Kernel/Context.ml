@@ -58,4 +58,9 @@ class context = object(self)
             | Value.Free _   -> raise (UnsolvedMeta meta)
             | Value.Solved _ -> ()
         end
+
+    method dump_metas =
+        Array.to_seqi metas
+        |> Seq.filter (fun (meta, info) -> meta < meta_count)
+        |> List.of_seq
 end

@@ -135,6 +135,7 @@ module Error = struct
         | TypeMismatch of Core.env * Core.expr * Core.expr * string
         | RedeclareVar of string
         | RedefineVar  of string
+        | UnsolvedMeta of (meta * Value.meta_info) list
 
     exception Error of span * error
 end
