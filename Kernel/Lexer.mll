@@ -35,6 +35,7 @@ rule token = parse
     | "->"    { TOK_MINUS_GT }
     | "=>"    { TOK_EQ_GT }
     | ','     { TOK_COMMA }
+    | '*'     { TOK_STAR }
     | '.'     { TOK_DOT }
     | ':'     { TOK_COLON }
     | '='     { TOK_EQ }

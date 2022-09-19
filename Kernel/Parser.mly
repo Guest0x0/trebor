@@ -21,7 +21,7 @@ let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 %token TOK_LPAREN TOK_RPAREN TOK_LBRACK TOK_RBRACK TOK_LBRACE TOK_RBRACE
 %token TOK_TILDE
 %token TOK_MINUS_GT TOK_EQ_GT
-%token TOK_COMMA TOK_DOT
+%token TOK_STAR TOK_COMMA TOK_DOT
 %token TOK_EQ
 %token TOK_COLON TOK_COLON_GT
 %token TOK_UNDERSCORE
@@ -35,6 +35,7 @@ let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 
 %right    TOK_MINUS_GT TOK_EQ_GT
 %right    TOK_COMMA
+%right    TOK_STAR
 %nonassoc TOK_EQ
 %left     TOK_COLON TOK_COLON_GT
 %left     TOK_TILDE
@@ -107,6 +108,9 @@ binop_expr:
 
     | binop_expr TOK_COLON binop_expr
         { mk_expr @@ Ann($1, $3) }
+
+    | binop_expr TOK_STAR binop_expr
+        { mk_expr @@ TyPair("", $1, $3) }
 
     | binop_expr TOK_COMMA binop_expr
         { mk_expr @@ Pair($1, $3) }
