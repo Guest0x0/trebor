@@ -46,13 +46,13 @@ let wrong_type g ctx span typ expected =
 let type_mismatch g ctx span expected actual err_ctx =
     let ctxC = Quote.env_to_core g ctx.tenv in
     let _, expectedC = Quote.typ_to_core g ctx.level ctx.tenv expected in
-    let _, actualC = Quote.typ_to_core g ctx.level ctx.tenv actual in
+    let _, actualC   = Quote.typ_to_core g ctx.level ctx.tenv actual in
     raise @@ Error.Error(span, TypeMismatch(ctxC, expectedC, actualC, err_ctx))
 
 
 
 let abstract_ctx g ctx ret_typ =
-    let _, expr = Quote.typ_to_core g ctx.level ctx.tenv ret_typ in
+    let expr = Quote.Simple.value_to_core ctx.level ret_typ in
     List.fold_left
         (fun typ (_, param_typ, kind) ->
                     match kind with
@@ -138,9 +138,8 @@ let rec infer g ctx expr =
     | Surface.Fun(name, Some param_typ, body) ->
         let _, param_typC = check_typ g ctx param_typ in
         let param_typV = Eval.eval g ctx.venv param_typC in
-        let ctx' = add_local name param_typV ctx in
-        let ret_typV, bodyC = infer g ctx' body in
-        let _, ret_typC = Quote.typ_to_core g ctx'.level ctx'.tenv ret_typV in
+        let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
+        let ret_typC = Quote.Simple.value_to_core (ctx.level + 1) ret_typV in
         ( Value.TyFun(name, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
         , Core.Fun(name, bodyC) )
 
@@ -310,7 +309,7 @@ let check_top_level g (span, top) =
                 (typV, typC, check "global definition" g empty_ctx typV def)
             | None ->
                 let typV, defC = infer g empty_ctx def in
-                let _, typC = Quote.typ_to_core g 0 [] typV in
+                let typC = Quote.Simple.value_to_core 0 typV in
                 (typV, typC, defC)
         in
         begin try g#solve_all; g#check_metas
