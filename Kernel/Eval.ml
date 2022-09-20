@@ -11,7 +11,7 @@ let apply vf va =
     match vf with
     | Fun  (_, f)                 -> f va
     | Stuck(TyFun(_, a, b), h, e) -> Stuck(b va, h, App(e, a, va))
-    | _                           -> raise RuntimeError
+    | _                           -> failwith "APPLY"; raise RuntimeError
 
 
 let project vpair field =

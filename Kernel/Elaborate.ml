@@ -51,23 +51,6 @@ let type_mismatch g ctx span expected actual err_ctx =
 
 
 
-let apply_ctxV f ctx =
-    let args =
-        ctx.tenv
-        |> List.mapi (fun idx (_, typ, kind) -> kind, Value.stuck_local (ctx.level - idx - 1) typ)
-        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
-    in
-    List.fold_right (Fun.flip Eval.apply) args f
-
-let apply_ctxC f ctx =
-    let args =
-        ctx.tenv
-        |> List.mapi (fun idx (_, _, kind) -> kind, Core.Local idx)
-        |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
-    in
-    List.fold_right (fun a f -> Core.App(f, a)) args f
-
-
 let rec infer g ctx expr =
     match expr.Surface.shape with
     | Surface.Var name ->
@@ -110,7 +93,7 @@ let rec infer g ctx expr =
         ( Type(ulevel + 1)
         , Core.Type ulevel )
 
-    | Surface.Shift(level , expr') ->
+    | Surface.Shift(level, expr') ->
         let typ, core = infer g ctx expr' in
         ( Eval.shift level typ
         , Core.Shift(level, core) )
@@ -197,11 +180,11 @@ let rec infer g ctx expr =
         end
 
     | Surface.Hole ->
-        let typ_of_typ = Unification.env_to_typ g ctx.level ctx.tenv (Value.Type 0) in
-        let typ_meta = g#fresh_meta typ_of_typ in
-        let typ = apply_ctxV Value.(Stuck(typ_of_typ, Meta("", typ_meta), EmptyElim)) ctx in
+        let typ_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv (Value.Type 0)) in
+        let elim = Unification.env_to_elim g ctx.level ctx.tenv in
+        let typ = Value.Stuck(Type 0, Value.Meta("", typ_meta), elim) in
         let hole_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
-        typ, apply_ctxC (Core.Meta("", hole_meta)) ctx
+        (typ, Quote.neutral_to_core g ctx.level (Value.Meta("", hole_meta)) elim)
 
 and check err_ctx g ctx typ expr =
     match typ, expr.shape with
@@ -246,7 +229,8 @@ and check err_ctx g ctx typ expr =
 
     | typ, Surface.Hole ->
         let meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
-        apply_ctxC (Core.Meta("", meta)) ctx
+        Quote.neutral_to_core g ctx.level (Value.Meta("", meta))
+            (Unification.env_to_elim g ctx.level ctx.tenv)
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in

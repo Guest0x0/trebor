@@ -459,7 +459,7 @@ let test = fun (A : Type) ->
     fun (a : A) -> id T a
 " ;;
 
-register_test "unify.meta-is-pair.arg-then-pair" None "
+register_test "unify.meta-is-pair.arg-pair" None "
 let id = fun (A : Type) (a : A) -> a
 
 let test = fun (A : Type) ->
@@ -467,13 +467,30 @@ let test = fun (A : Type) ->
     fun (a : A) -> (id p.1 a, id p.2 a)
 " ;;
 
-register_test "unify.meta-is-pair.pair-then-arg" None "
+register_test "unify.meta-is-pair.pair-arg" None "
 let id = fun (A : Type) (a : A) -> a
 
 let test =
     let p = _ : ((Type -> Type) * (Type -> Type)) in
     fun (A : Type) (a : A) -> (id (p.1 A) a, id (p.2 A) a)
 " ;;
+
+register_test "unify.meta-is-pair.pair-arg-pair" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test =
+    let p = _ : ((Type -> Type) * (Type -> Type * Type)) in
+    fun (A : Type) (a : A) -> (id (p.1 A) a, id (p.2 A).1 a, id (p.2 A).2 a)
+" ;;
+
+register_test "unify.meta-is-pair.arg-pair-arg" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test = fun (A : Type) ->
+    let p = _ : (Type * (Type -> Type)) in
+    fun (B : Type) (a : A) (b : B) -> (id p.1 a, id (p.2 B) (a, b))
+" ;;
+
 
 
 register_test "unify.pair-applied-to-meta.1" None "

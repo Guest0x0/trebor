@@ -29,42 +29,50 @@ let env_to_typ g level env ret_typ =
     |> Eval.eval g []
 
 
+let env_to_elim g level env =
+    let args =
+        env
+        |> List.mapi (fun idx (_, typ, kind) -> typ, kind, stuck_local (level - idx - 1) typ)
+        |> List.filter_map (fun (typ, kind, arg) -> if kind = `Bound then Some(typ, arg) else None)
+    in
+    List.fold_right (fun (typ, arg) elim -> App(elim, typ, arg)) args EmptyElim
+
+
 let decompose_pair g meta elim =
     let rec loop elim =
         match elim with
         | EmptyElim ->
             begin match g#find_meta meta with
-            | Free typ -> typ, 0, [], meta, 0, elim
+            | Free typ -> typ, 0, [], meta, elim
             | _        -> raise RuntimeError
             end
         | App(elim', arg_typ, arg) ->
-            let typ, level, env, meta', elim_len, elim' = loop elim' in
+            let typ, level, env, meta', elim' = loop elim' in
             begin match typ with
             | TyFun(_, a, b) ->
-                ( b arg, level + 1, ("", a, `Bound) :: env
-                , meta', elim_len + 1, App(elim', arg_typ, arg) )
+                b arg, level + 1, ("", a, `Bound) :: env, meta', App(elim', a, arg)
             | _  ->
                 raise RuntimeError
             end
         | Proj(elim', field) ->
-            let typ, level, env, meta', elim_len, elim' = loop elim' in
+            let typ, level, env, meta', elim' = loop elim' in
             begin match typ with
             | TyPair(_, fst_typ, snd_typ) ->
                 let fst_meta = g#fresh_meta (env_to_typ g level env fst_typ) in
-                let fstV = Stuck(fst_typ, Meta("", fst_meta), elim') in
+                let fstV = Stuck(fst_typ, Meta("", fst_meta), env_to_elim g level env) in
                 let snd_typ = snd_typ fstV in
                 let snd_meta = g#fresh_meta (env_to_typ g level env snd_typ) in
-                let sndV = Stuck(snd_typ, Meta("", snd_meta), elim') in
-                g#solve_meta meta' (close_value g elim_len typ @@ Pair(fstV, sndV));
+                let sndV = Stuck(snd_typ, Meta("", snd_meta), env_to_elim g level env) in
+                g#solve_meta meta' (close_value g level typ @@ Pair(fstV, sndV));
                 begin match field with
-                | `Fst -> (fst_typ, level, env, fst_meta, 0, EmptyElim)
-                | `Snd -> (snd_typ, level, env, snd_meta, 0, EmptyElim)
+                | `Fst -> (fst_typ, level, env, fst_meta, elim')
+                | `Snd -> (snd_typ, level, env, snd_meta, elim')
                 end
             | _ ->
                 raise RuntimeError
             end
     in
-    let _, _, _, meta', _, elim' = loop elim in
+    let _, _, _, meta', elim' = loop elim in
     meta', elim'
 
 
