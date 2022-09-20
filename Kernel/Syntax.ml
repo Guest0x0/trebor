@@ -3,7 +3,7 @@ type meta = int
 
 module Value = struct
     type value =
-        | Stuck  of head * elimination
+        | Stuck  of value * head * elimination
         | Type   of int
         | TyFun  of string * value * (value -> value)
         | Fun    of string * (value -> value)
@@ -24,13 +24,16 @@ module Value = struct
 
     and elimination =
         | EmptyElim
-        | App   of elimination * value
+        | App   of elimination * value * value
         | Proj  of elimination * [`Fst | `Snd]
+
+
+    type neutral = head * elimination
 
 
     type meta_info =
         | Free   of value
-        | Solved of value
+        | Solved of value * value
 
 
     type env = (string * value * [`Bound | `Defined]) list
@@ -41,7 +44,7 @@ module Value = struct
         | Definition of value * value
 
 
-    let stuck_local level = Stuck(Local level, EmptyElim) [@@inline]
+    let stuck_local level typ = Stuck(typ, Local level, EmptyElim) [@@inline]
 end
 
 
@@ -71,6 +74,11 @@ module Core = struct
               ; eq      : expr Lazy.t }
 
         | Meta   of string * meta
+
+
+    type meta_info =
+        | Free   of expr
+        | Solved of expr * expr
 
 
     type env = (string * expr * [`Bound | `Defined]) list
@@ -135,7 +143,7 @@ module Error = struct
         | TypeMismatch of Core.env * Core.expr * Core.expr * string
         | RedeclareVar of string
         | RedefineVar  of string
-        | UnsolvedMeta of (meta * Value.meta_info) list
+        | UnsolvedMeta of (meta * Core.meta_info) list
 
     exception Error of span * error
 end

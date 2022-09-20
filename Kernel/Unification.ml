@@ -10,67 +10,74 @@ let rec make_fun n body =
     then body
     else make_fun (n - 1) (Core.Fun("", body))
 
-let abstract_elim g elim body =
-    let rec loop level elim =
-        match elim with
-        | EmptyElim     -> Quote.Simple.value_to_core level body
-        | App(elim', _) -> Core.Fun("", loop (level + 1) elim')
-        | Proj _        -> raise RuntimeError
-    in
-    Eval.eval g [] (loop 0 elim)
 
-let env_to_funtyp g level env body =
-    let rec loop level env body =
-        match env with
-        | []          -> body
-        | typ :: env' -> loop (level - 1) env' @@ Core.TyFun("", Quote.Simple.value_to_core level typ, body)
-    in
-    loop level env (Quote.Simple.value_to_core level body)
+let close_value g level typ value =
+    let body = Quote.value_to_core g level typ value in
+    Eval.eval g [] @@ make_fun level body
+
+
+
+let env_to_typ g level env ret_typ =
+    let _, ret_typC = Quote.typ_to_core g level ret_typ in
+    let envC = Quote.env_to_core g env in
+    List.fold_left
+        (fun body (name, param_typ, kind) ->
+                    match kind with
+                    | `Defined -> body
+                    | `Bound   -> Core.TyFun(name, param_typ, body))
+        ret_typC envC
     |> Eval.eval g []
 
 
-let rec decompose_pair g level meta elim =
-    match elim with
-    | EmptyElim ->
-        begin match g#find_meta meta with
-        | Free typ -> typ, [], meta, elim
-        | _        -> raise RuntimeError
-        end
-    | App(elim', arg) ->
-        let typ, env, meta', elim' = decompose_pair g level meta elim' in
-        begin match typ with
-        | TyFun(_, a, b) -> b arg, a :: env, meta', App(elim', arg)
-        | _              -> raise RuntimeError
-        end
-    | Proj(elim', field) ->
-        let typ, env, meta', elim' = decompose_pair g level meta elim' in
-        begin match typ with
-        | TyPair(_, fst_typ, snd_typ) ->
-            let fst_meta = g#fresh_meta (env_to_funtyp g level env fst_typ) in
-            let fstV = Stuck(Meta("", fst_meta), elim') in
-            let snd_typ = snd_typ fstV in
-            let snd_meta = g#fresh_meta (env_to_funtyp g level env snd_typ) in
-            let sndV = Stuck(Meta("", snd_meta), elim') in
-            g#solve_meta meta' (abstract_elim g elim' @@ Pair(fstV, sndV));
-            begin match field with
-            | `Fst -> (fst_typ, env, fst_meta, elim')
-            | `Snd -> (snd_typ, env, snd_meta, elim')
+let decompose_pair g meta elim =
+    let rec loop elim =
+        match elim with
+        | EmptyElim ->
+            begin match g#find_meta meta with
+            | Free typ -> typ, 0, [], meta, 0, elim
+            | _        -> raise RuntimeError
             end
-        | _ ->
-            raise RuntimeError
-        end
+        | App(elim', arg_typ, arg) ->
+            let typ, level, env, meta', elim_len, elim' = loop elim' in
+            begin match typ with
+            | TyFun(_, a, b) ->
+                ( b arg, level + 1, ("", a, `Bound) :: env
+                , meta', elim_len + 1, App(elim', arg_typ, arg) )
+            | _  ->
+                raise RuntimeError
+            end
+        | Proj(elim', field) ->
+            let typ, level, env, meta', elim_len, elim' = loop elim' in
+            begin match typ with
+            | TyPair(_, fst_typ, snd_typ) ->
+                let fst_meta = g#fresh_meta (env_to_typ g level env fst_typ) in
+                let fstV = Stuck(fst_typ, Meta("", fst_meta), elim') in
+                let snd_typ = snd_typ fstV in
+                let snd_meta = g#fresh_meta (env_to_typ g level env snd_typ) in
+                let sndV = Stuck(snd_typ, Meta("", snd_meta), elim') in
+                g#solve_meta meta' (close_value g elim_len typ @@ Pair(fstV, sndV));
+                begin match field with
+                | `Fst -> (fst_typ, level, env, fst_meta, 0, EmptyElim)
+                | `Snd -> (snd_typ, level, env, snd_meta, 0, EmptyElim)
+                end
+            | _ ->
+                raise RuntimeError
+            end
+    in
+    let _, _, _, meta', _, elim' = loop elim in
+    meta', elim'
 
 
 
 type renaming =
     { dom : int
     ; cod : int
-    ; map : (int * value) list }
+    ; map : (int * neutral) list }
 
 let add_boundvar ren =
     { dom = ren.dom + 1
     ; cod = ren.cod + 1
-    ; map = (ren.dom, stuck_local ren.cod) :: ren.map }
+    ; map = (ren.dom, (Local ren.cod, EmptyElim)) :: ren.map }
 
 
 
@@ -81,19 +88,19 @@ let elim_to_renaming level elim =
     let rec loop = function
         | EmptyElim ->
             (0, [])
-        | App(elim', arg) ->
+        | App(elim', _, arg) ->
             let (cod, map) = loop elim' in
-            (cod + 1, add_value arg (stuck_local cod) map)
+            (cod + 1, add_value arg (Local cod, EmptyElim) map)
         | Proj(_, _) ->
             raise RuntimeError
 
-    and add_value value dst map =
+    and add_value value ((head, elim) as dst) map =
         match value with
-        | Stuck(Local lvl, EmptyElim) when not (List.mem_assoc lvl map) ->
+        | Stuck(_, Local lvl, EmptyElim) when not (List.mem_assoc lvl map) ->
             (lvl, dst) :: map
         | Pair(fst, snd) ->
-            let map = add_value fst (project dst `Fst) map in
-            add_value snd (project dst `Snd) map
+            let map = add_value fst (head, Proj(elim, `Fst)) map in
+            add_value snd (head, Proj(elim, `Snd)) map
         | _ ->
             raise CannotSolveYet
 
@@ -103,57 +110,77 @@ let elim_to_renaming level elim =
 
 
 
-let rec rename_value g m ren value =
-    match force g value with
-    | Stuck(head, elim) ->
-        let headC = rename_head g m ren head in
-        rename_elim g m ren headC elim
+let rec rename_value g m ren typ value =
+    match force g typ, force g value with
+    | Type _, value ->
+        rename_typ g m ren value
+
+    | TyFun(name, a, b), _ ->
+        let var = stuck_local ren.dom a in
+        Core.Fun(name, rename_value g m (add_boundvar ren) (b var) (apply value var))
+
+    | TyPair(_, a, b), _ ->
+        let fst = project value `Fst in
+        let snd = project value `Snd in
+        Core.Pair(rename_value g m ren a fst, rename_value g m ren (b fst) snd)
+
+    | (TyEq _ | Stuck _), Stuck(_, head, elim) ->
+        rename_neutral g m ren head elim
+
+    | _ ->
+        raise RuntimeError
+
+
+and rename_neutral g m ren head = function
+    | EmptyElim ->
+        begin match head with
+        | Local lvl ->
+            begin match List.assoc lvl ren.map with
+            | (head, elim)        -> Quote.neutral_to_core g ren.cod head elim
+            | exception Not_found -> raise CannotSolveYet
+            end
+        | Coe coe ->
+            let universe = Type coe.ulevel in
+            Core.Coe { ulevel  = coe.ulevel
+                     ; coerced = rename_value g m ren coe.lhs coe.coerced
+                     ; lhs     = rename_value g m ren universe coe.lhs
+                     ; rhs     = rename_value g m ren universe coe.rhs
+                     ; eq      = lazy(rename_value g m ren
+                               (TyEq( (coe.lhs, universe), (coe.rhs, universe) ))
+                               (Lazy.force coe.eq)) }
+        | Meta(_, m') when m = m' ->
+            raise UnificationFailure
+        | head ->
+            Quote.neutral_to_core g ren.dom head EmptyElim
+        end
+    | App(elim', arg_typ, arg) ->
+        Core.App(rename_neutral g m ren head elim', rename_value g m ren arg_typ arg)
+    | Proj(elim', field) ->
+        Core.Proj(rename_neutral g m ren head elim', field)
+
+
+and rename_typ g m ren = function
     | Type ulevel ->
         Core.Type ulevel
 
     | TyFun(name, a, b) ->
-        Core.TyFun(name, rename_value g m ren a, rename_func g m ren b)
-    | Fun(name, f) ->
-        Core.Fun(name, rename_func g m ren f)
-
+        Core.TyFun( name
+                  , rename_typ g m ren a
+                  , rename_typ g m (add_boundvar ren) (b @@ stuck_local ren.dom a))
     | TyPair(name, a, b) ->
-        Core.TyPair(name, rename_value g m ren a, rename_func g m ren b)
-    | Pair(fst, snd) ->
-        Pair(rename_value g m ren fst, rename_value g m ren snd)
+        Core.TyPair( name
+                   , rename_typ g m ren a
+                   , rename_typ g m (add_boundvar ren) (b @@ stuck_local ren.dom a))
 
     | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
-        Core.TyEq( (rename_value g m ren lhs, rename_value g m ren lhs_typ)
-                 , (rename_value g m ren rhs, rename_value g m ren rhs_typ) )
+        Core.TyEq( (rename_value g m ren lhs_typ lhs, rename_typ g m ren lhs_typ)
+                 , (rename_value g m ren rhs_typ rhs, rename_typ g m ren rhs_typ) )
 
+    | Stuck(_, head, elim) ->
+        rename_neutral g m ren head elim
 
-and rename_func g m ren f =
-    rename_value g m (add_boundvar ren) (f @@ stuck_local ren.dom)
-
-and rename_head g m ren = function
-    | Local lvl ->
-        begin match List.assoc lvl ren.map with
-        | value               -> Quote.Simple.value_to_core ren.cod value
-        | exception Not_found -> raise CannotSolveYet
-        end
-    | Coe coe ->
-        Core.Coe { ulevel  = coe.ulevel
-                 ; coerced = rename_value g m ren coe.coerced
-                 ; lhs     = rename_value g m ren coe.lhs
-                 ; rhs     = rename_value g m ren coe.rhs
-                 ; eq      = lazy(rename_value g m ren @@ Lazy.force coe.eq) }
-    | Meta(_, m') when m = m' ->
-        raise UnificationFailure
-    | head ->
-        Quote.Simple.head_to_core ren.dom head
-
-and rename_elim g m ren headC = function
-    | EmptyElim ->
-        headC
-    | App(elim', arg) ->
-        Core.App(rename_elim g m ren headC elim', rename_value g m ren arg)
-    | Proj(elim', field) ->
-        Core.Proj(rename_elim g m ren headC elim', field)
-
+    | _ ->
+        raise RuntimeError
 
 
 
@@ -167,12 +194,12 @@ class context = object(self)
     val mutable progressed = false
 
 
-    method subtyp level (env : Value.env) v1 v2 =
-        try self#unify_typ_aux `Subtyp level env v1 v2
+    method subtyp level v1 v2 =
+        try self#unify_typ_aux `Subtyp level v1 v2
         with CannotSolveYet -> ()
 
-    method unify_typ level (env : Value.env) v1 v2 =
-        try self#unify_typ_aux `Equal level env v1 v2
+    method unify_typ level v1 v2 =
+        try self#unify_typ_aux `Equal level v1 v2
         with CannotSolveYet -> ()
 
 
@@ -197,89 +224,79 @@ class context = object(self)
         done
 
 
-    method private unify_value level env typ v1 v2 =
+    method private unify_value level typ v1 v2 =
         match force self typ, force self v1, force self v2 with
         | Type _, typv1, typv2 ->
-            self#unify_typ_aux `Equal level env typv1 typv2
+            self#unify_typ_aux `Equal level typv1 typv2
 
         | TyFun(name, a, b), f1, f2 ->
-            let var = stuck_local level in
-            self#unify_value (level + 1) ((name, a, `Bound) :: env) (b var)
-                (apply f1 var) (apply f2 var)
+            let var = stuck_local level a in
+            self#unify_value (level + 1) (b var) (apply f1 var) (apply f2 var)
 
         | TyPair(_, a, b), p1, p2 ->
             let fst1 = project p1 `Fst in
             let fst2 = project p2 `Fst in
-            self#unify_value level env a fst1 fst2;
-            self#unify_value level env (b fst1) (project p1 `Snd) (project p2 `Snd)
+            self#unify_value level a fst1 fst2;
+            self#unify_value level (b fst1) (project p1 `Snd) (project p2 `Snd)
 
         | TyEq _, _, _ ->
             ()
 
-        | Stuck _, Stuck(Meta _, _), Stuck(Meta _, _) ->
-            equations <- (fun () -> self#unify_value level env typ v1 v2) :: equations;
+        | _, Stuck(_, Meta _, _), Stuck(_, Meta _, _) ->
+            equations <- (fun () -> self#unify_value level typ v1 v2) :: equations;
             raise CannotSolveYet
 
-        | Stuck _, Stuck(Meta(_, meta), elim), v
-        | Stuck _, v, Stuck(Meta(_, meta), elim) ->
+        | _, Stuck(_, Meta(_, meta), elim), v
+        | _, v, Stuck(_, Meta(_, meta), elim) ->
             begin try
-                let _, _, meta, elim = decompose_pair self level meta elim in
+                let meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
-                let body = rename_value self meta ren v in
+                let body = rename_value self meta ren typ v in
                 let sol = make_fun ren.cod body in
                 self#solve_meta meta (Eval.eval self [] sol);
                 progressed <- true
             with CannotSolveYet ->
-                equations <- (fun () -> self#unify_value level env typ v1 v2) :: equations;
+                equations <- (fun () -> self#unify_value level typ v1 v2) :: equations;
                 raise CannotSolveYet
             end
 
-        | Stuck _, Stuck(head1, elim1), Stuck(head2, elim2) ->
-            let head_typ = self#unify_head level env head1 head2 in
-            ignore (self#unify_elim level env head1 head_typ elim1 elim2)
+        | Stuck _, Stuck(_, head1, elim1), Stuck(_, head2, elim2) ->
+            self#unify_head level head1 head2;
+            self#unify_elim level elim1 elim2
 
         | _ ->
             raise RuntimeError
 
 
-    method private unify_head level env head1 head2 =
+    method private unify_head level head1 head2 =
         match head1, head2 with
         | TopVar(shift1, name1), TopVar(shift2, name2) when shift1 = shift2 && name1 = name2 ->
-            let (AxiomDecl typ | Definition(typ, _)) = self#find_global name1 in
-            typ
+            ()
         | Local lvl1, Local lvl2 when lvl1 = lvl2 ->
-            let (_, typ, _) = List.nth env (level - lvl1 - 1) in
-            typ 
+            ()
         | Coe coe1, Coe coe2 when coe1.ulevel = coe2.ulevel ->
-            self#unify_value level env (Type coe1.ulevel) coe1.lhs coe2.lhs;
-            self#unify_value level env (Type coe1.ulevel) coe1.rhs coe2.rhs;
-            self#unify_value level env coe1.lhs coe1.coerced coe2.coerced;
-            coe1.rhs
+            self#unify_value level (Type coe1.ulevel) coe1.lhs coe2.lhs;
+            self#unify_value level (Type coe1.ulevel) coe1.rhs coe2.rhs;
+            self#unify_value level coe1.lhs coe1.coerced coe2.coerced
         | _ ->
             raise UnificationFailure
 
 
-    method private unify_elim level env head head_typ elim1 elim2 =
+    method private unify_elim level elim1 elim2 =
         match elim1, elim2 with
         | EmptyElim, EmptyElim ->
-            head_typ
-        | App(elim1', arg1), App(elim2', arg2) ->
-            begin match self#unify_elim level env head head_typ elim1' elim2' with
-            | TyFun(_, a, b) -> self#unify_value level env a arg1 arg2; b arg1
-            | _              -> raise RuntimeError
-            end
+            ()
+        | App(elim1', arg_typ, arg1), App(elim2', _, arg2) ->
+            self#unify_elim level elim1' elim2';
+            self#unify_value level arg_typ arg1 arg2
         | Proj(elim1', field1), Proj(elim2', field2) when field1 = field2 ->
-            begin match self#unify_elim level env head head_typ elim1' elim2', field1 with
-            | TyPair(_, a, b), `Fst -> a
-            | TyPair(_, a, b), `Snd -> b @@ Stuck(head, Proj(elim1', `Fst))
-            | _                     -> raise RuntimeError
-            end
+            self#unify_elim level elim1' elim2'
         | _ ->
             raise UnificationFailure
 
 
 
-    method private unify_typ_aux (mode : [`Subtyp | `Equal]) level env sub sup =
+    method private unify_typ_aux (mode : [`Subtyp | `Equal]) level sub sup =
         match force self sub, force self sup with
         | Type ulevel1, Type ulevel2 ->
             begin match mode with
@@ -289,42 +306,42 @@ class context = object(self)
             end
 
         | TyFun (name, a1, b1), TyFun (_, a2, b2) ->
-            self#unify_typ_aux mode level env a2 a1;
-            let var = stuck_local level in
-            self#unify_typ_aux mode (level + 1) ((name, a2, `Bound) :: env) (b1 var) (b2 var)
+            self#unify_typ_aux mode level a2 a1;
+            let var = stuck_local level a2 in
+            self#unify_typ_aux mode (level + 1) (b1 var) (b2 var)
 
         | TyPair(name, a1, b1), TyPair(_, a2, b2) ->
-            self#unify_typ_aux mode level env a1 a2;
-            let var = stuck_local level in
-            self#unify_typ_aux mode (level + 1) ((name, a1, `Bound) :: env) (b1 var) (b2 var)
+            self#unify_typ_aux mode level a1 a2;
+            let var = stuck_local level a1 in
+            self#unify_typ_aux mode (level + 1) (b1 var) (b2 var)
 
         | TyEq((lhs1, lhs_typ1), (rhs1, rhs_typ1))
         , TyEq((lhs2, lhs_typ2), (rhs2, rhs_typ2)) ->
-            self#unify_typ_aux mode level env lhs_typ1 lhs_typ2;
-            self#unify_typ_aux mode level env rhs_typ1 rhs_typ2;
-            self#unify_value level env lhs_typ1 lhs1 lhs2;
-            self#unify_value level env rhs_typ1 rhs1 rhs2
+            self#unify_typ_aux mode level lhs_typ1 lhs_typ2;
+            self#unify_typ_aux mode level rhs_typ1 rhs_typ2;
+            self#unify_value level lhs_typ1 lhs1 lhs2;
+            self#unify_value level rhs_typ1 rhs1 rhs2
 
-        | Stuck(Meta _, _), Stuck(Meta _, _) ->
-            equations <- (fun () -> self#unify_typ_aux mode level env sub sup) :: equations;
+        | Stuck(_, Meta _, _), Stuck(_, Meta _, _) ->
+            equations <- (fun () -> self#unify_typ_aux mode level sub sup) :: equations;
             raise CannotSolveYet
 
-        | Stuck(Meta(_, meta), elim), v
-        | v, Stuck(Meta(_, meta), elim) ->
+        | Stuck(_, Meta(_, meta), elim), v
+        | v, Stuck(_, Meta(_, meta), elim) ->
             begin try
-                let _, _, meta, elim = decompose_pair self level meta elim in
+                let meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
-                let sol = make_fun ren.cod (rename_value self meta ren v) in
+                let sol = make_fun ren.cod (rename_typ  self meta ren v) in
                 self#solve_meta meta (Eval.eval self [] sol);
                 progressed <- true
             with CannotSolveYet ->
-                equations <- (fun () -> self#unify_typ_aux mode level env sub sup) :: equations;
+                equations <- (fun () -> self#unify_typ_aux mode level sub sup) :: equations;
                 raise CannotSolveYet
             end
 
-        | Stuck(head1, elim1), Stuck(head2, elim2) ->
-            let head_typ = self#unify_head level env head1 head2 in
-            ignore (self#unify_elim level env head1 head_typ elim1 elim2)
+        | Stuck(_, head1, elim1), Stuck(_, head2, elim2) ->
+            self#unify_head level head1 head2;
+            self#unify_elim level elim1 elim2
 
         | _ ->
             raise UnificationFailure

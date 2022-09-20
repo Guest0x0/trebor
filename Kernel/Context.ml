@@ -8,7 +8,7 @@ exception UnsolvedMeta of meta
 
 
 
-let garbage = Value.Solved(Value.Type 0)
+let garbage = Value.Free(Value.Type 0)
 
 class context = object(self)
     val globals : (string, Value.top_level) Hashtbl.t = Hashtbl.create 42
@@ -37,9 +37,9 @@ class context = object(self)
         metas.(meta)
 
     method solve_meta meta value =
-        if meta >= meta_count then
-            raise Not_found;
-        metas.(meta) <- Solved value
+        match self#find_meta meta with
+        | Value.Free typ -> metas.(meta) <- Solved(typ, value)
+        | Value.Solved _ -> failwith "Context.context#solve_meta"
 
 
     method fresh_meta typ =
@@ -54,9 +54,10 @@ class context = object(self)
 
     method check_metas =
         metas |> Array.iteri begin fun meta info ->
-            match info with
-            | Value.Free _   -> raise (UnsolvedMeta meta)
-            | Value.Solved _ -> ()
+            if meta < meta_count then
+                match info with
+                | Value.Free _   -> raise (UnsolvedMeta meta)
+                | Value.Solved _ -> ()
         end
 
     method dump_metas =

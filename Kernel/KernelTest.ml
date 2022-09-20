@@ -12,9 +12,13 @@ let expr_of_string src =
     let lexbuf = Lexing.from_string src in
     Parser.single_expr Lexer.token lexbuf
 
-let core_of_string globals ctx src =
-    let _, core = Elaborate.check_typ globals ctx (expr_of_string src) in
-    core
+let core_of_string g ctx src =
+    try snd @@ Elaborate.check_typ g ctx (expr_of_string src) with
+      exn ->
+        Format.printf "@[<v2>error on processing expected result:@ %a@]@ "
+            (Pretty.pp_exception true) exn;
+        Format.print_flush ();
+        raise exn
 
 
 
@@ -108,10 +112,11 @@ let register_test name expectation src =
 let run_test (name, expectation, src) =
     let open Format in
     let g = new Unification.context in
-    Prelude.load g;
     let result =
-        try Ok(Elaborate.check_program g (parse_string ~filename:name src)) with
-          exn -> Error exn
+        try
+            Prelude.load g;
+            Ok(Elaborate.check_program g (parse_string ~filename:name src))
+        with exn -> Error exn
     in
     let pp_result fmt = function
         | Ok _      -> fprintf fmt "actual result: well typed"

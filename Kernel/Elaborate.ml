@@ -18,7 +18,7 @@ let add_local name typ ?value ctx =
     let value, kind =
         match value with
         | Some value -> value, `Defined
-        | None       -> Value.stuck_local ctx.level, `Bound
+        | None       -> Value.stuck_local ctx.level typ, `Bound
     in
     { level = ctx.level + 1
     ; venv  = value :: ctx.venv
@@ -40,42 +40,32 @@ let find_local name ctx =
 
 let wrong_type g ctx span typ expected =
     let ctxC = Quote.env_to_core g ctx.tenv in
-    let _, typC = Quote.typ_to_core g ctx.level ctx.tenv typ in
+    let _, typC = Quote.typ_to_core g ctx.level typ in
     raise @@ Error.Error(span, WrongType(ctxC, typC, expected))
 
 let type_mismatch g ctx span expected actual err_ctx =
     let ctxC = Quote.env_to_core g ctx.tenv in
-    let _, expectedC = Quote.typ_to_core g ctx.level ctx.tenv expected in
-    let _, actualC   = Quote.typ_to_core g ctx.level ctx.tenv actual in
+    let _, expectedC = Quote.typ_to_core g ctx.level expected in
+    let _, actualC   = Quote.typ_to_core g ctx.level actual in
     raise @@ Error.Error(span, TypeMismatch(ctxC, expectedC, actualC, err_ctx))
 
 
 
-let abstract_ctx g ctx ret_typ =
-    let expr = Quote.Simple.value_to_core ctx.level ret_typ in
-    List.fold_left
-        (fun typ (_, param_typ, kind) ->
-                    match kind with
-                    | `Defined -> typ
-                    | `Bound   -> fun env -> Value.TyFun("", param_typ, fun v -> typ (v :: env)))
-        (fun env -> Eval.eval g env expr) ctx.tenv
-    @@ []
-
 let apply_ctxV f ctx =
     let args =
         ctx.tenv
-        |> List.mapi (fun lvl (_, _, kind) -> kind, Value.stuck_local lvl)
+        |> List.mapi (fun idx (_, typ, kind) -> kind, Value.stuck_local (ctx.level - idx - 1) typ)
         |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
     in
-    List.fold_left Eval.apply f args
+    List.fold_right (Fun.flip Eval.apply) args f
 
 let apply_ctxC f ctx =
     let args =
         ctx.tenv
-        |> List.mapi (fun lvl (_, _, kind) -> kind, Core.Local(ctx.level - lvl - 1))
+        |> List.mapi (fun idx (_, _, kind) -> kind, Core.Local idx)
         |> List.filter_map (fun (kind, arg) -> if kind = `Bound then Some arg else None)
     in
-    List.fold_left (fun f a -> Core.App(f, a)) f args
+    List.fold_right (fun a f -> Core.App(f, a)) args f
 
 
 let rec infer g ctx expr =
@@ -139,7 +129,7 @@ let rec infer g ctx expr =
         let _, param_typC = check_typ g ctx param_typ in
         let param_typV = Eval.eval g ctx.venv param_typC in
         let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
-        let ret_typC = Quote.Simple.value_to_core (ctx.level + 1) ret_typV in
+        let _, ret_typC = Quote.typ_to_core g (ctx.level + 1) ret_typV in
         ( Value.TyFun(name, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
         , Core.Fun(name, bodyC) )
 
@@ -163,7 +153,7 @@ let rec infer g ctx expr =
     | Surface.Pair(fst, snd) ->
         let fst_typ, fstC = infer g ctx fst in
         let snd_typ, sndC = infer g ctx snd in
-        ( Value.TyPair("", fst_typ, fun _ -> snd_typ)
+        ( Value.TyPair("", fst_typ, Fun.const snd_typ)
         , Core.Pair(fstC, sndC) )
 
     | Surface.Proj(pair, field) ->
@@ -185,8 +175,8 @@ let rec infer g ctx expr =
     | Surface.TyEq(lhs, rhs) ->
         let lhs_typ, lhsC = infer g ctx lhs in
         let rhs_typ, rhsC = infer g ctx rhs in
-        let ul_lhs, lhs_typC = Quote.typ_to_core g ctx.level ctx.tenv lhs_typ in
-        let ul_rhs, rhs_typC = Quote.typ_to_core g ctx.level ctx.tenv rhs_typ in
+        let ul_lhs, lhs_typC = Quote.typ_to_core g ctx.level lhs_typ in
+        let ul_rhs, rhs_typC = Quote.typ_to_core g ctx.level rhs_typ in
         ( Type(max ul_lhs ul_rhs)
         , Core.TyEq((lhsC, lhs_typC), (rhsC, rhs_typC)) )
 
@@ -194,8 +184,8 @@ let rec infer g ctx expr =
         begin match infer g ctx eq with
         | TyEq((lhs, Type ul_lhs), (rhs, Type ul_rhs)), eqC ->
             let coercedC = check "coerced value" g ctx lhs coerced in
-            let ul_lhs, lhsC = Quote.typ_to_core g ctx.level ctx.tenv lhs in
-            let ul_rhs, rhsC = Quote.typ_to_core g ctx.level ctx.tenv rhs in
+            let _, lhsC = Quote.typ_to_core g ctx.level lhs in
+            let _, rhsC = Quote.typ_to_core g ctx.level rhs in
             ( rhs
             , Core.Coe { ulevel  = max ul_lhs ul_rhs
                        ; coerced = coercedC
@@ -207,9 +197,10 @@ let rec infer g ctx expr =
         end
 
     | Surface.Hole ->
-        let typ_meta = g#fresh_meta (abstract_ctx g ctx (Value.Type 0)) in
-        let typ = apply_ctxV Value.(Stuck(Meta("", typ_meta), EmptyElim)) ctx in
-        let hole_meta = g#fresh_meta (abstract_ctx g ctx typ) in
+        let typ_of_typ = Unification.env_to_typ g ctx.level ctx.tenv (Value.Type 0) in
+        let typ_meta = g#fresh_meta typ_of_typ in
+        let typ = apply_ctxV Value.(Stuck(typ_of_typ, Meta("", typ_meta), EmptyElim)) ctx in
+        let hole_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
         typ, apply_ctxC (Core.Meta("", hole_meta)) ctx
 
 and check err_ctx g ctx typ expr =
@@ -234,7 +225,7 @@ and check err_ctx g ctx typ expr =
             | Some ann ->
                 let _, annC = check_typ g ctx ann in
                 let annV = Eval.eval g ctx.venv annC in
-                begin match g#subtyp ctx.level ctx.tenv param_typ annV with
+                begin match g#subtyp ctx.level param_typ annV with
                 | () ->
                     annV
                 | exception Unification.UnificationFailure ->
@@ -243,7 +234,7 @@ and check err_ctx g ctx typ expr =
             | None ->
                 param_typ
         in
-        let ret_typ = ret_typ @@ Value.stuck_local ctx.level in
+        let ret_typ = ret_typ @@ Value.stuck_local ctx.level param_typ in
         let bodyC = check err_ctx g (add_local name param_typ ctx) ret_typ body in
         Core.Fun(name, bodyC)
 
@@ -254,12 +245,12 @@ and check err_ctx g ctx typ expr =
         Core.Pair(fstC, sndC)
 
     | typ, Surface.Hole ->
-        let meta = g#fresh_meta (abstract_ctx g ctx typ) in
+        let meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
         apply_ctxC (Core.Meta("", meta)) ctx
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
-        begin match g#subtyp ctx.level ctx.tenv actual_typ typ with
+        begin match g#subtyp ctx.level actual_typ typ with
         | () ->
             exprC
         | exception Unification.UnificationFailure ->
@@ -287,14 +278,20 @@ let rec check_env g env =
 
 
 
+let flush_meta span g =
+    try g#solve_all; g#check_metas
+    with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
+        let metas = g#dump_metas |> List.map @@ fun (meta, info) ->
+            (meta, Quote.meta_info_to_core g info)
+        in
+        raise @@ Error.Error(span, Error.UnsolvedMeta metas)
+
+
 let check_top_level g (span, top) =
     match top with
     | Surface.AxiomDecl(name, typ) ->
         let _, typC = check_typ g empty_ctx typ in
-        begin try g#solve_all; g#check_metas
-        with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
-            raise @@ Error.Error(span, Error.UnsolvedMeta g#dump_metas)
-        end;
+        flush_meta span g;
         begin try g#add_global_decl name (Eval.eval g [] typC) with
         | Context.RedefineGlobal -> raise (Error.Error (span, RedeclareVar name))
         end;
@@ -309,13 +306,10 @@ let check_top_level g (span, top) =
                 (typV, typC, check "global definition" g empty_ctx typV def)
             | None ->
                 let typV, defC = infer g empty_ctx def in
-                let typC = Quote.Simple.value_to_core 0 typV in
+                let _, typC = Quote.typ_to_core g 0 typV in
                 (typV, typC, defC)
         in
-        begin try g#solve_all; g#check_metas
-        with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
-            raise @@ Error.Error(span, Error.UnsolvedMeta g#dump_metas)
-        end;
+        flush_meta span g;
         g#add_global_def name typV (Eval.eval g [] defC);
         Core.Definition(name, typC, defC)
 

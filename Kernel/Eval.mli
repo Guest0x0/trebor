@@ -9,7 +9,8 @@ exception CannotShiftMeta
 val apply   : value -> value -> value
 val project : value -> [`Fst | `Snd] -> value
 val shift   : int -> value -> value
-val coerce  : int -> value -> value -> value -> value Lazy.t -> value
+
+val coerce  : #Context.context -> int -> value -> value -> value -> value Lazy.t -> value
 
 val eliminate : value -> elimination -> value
 
