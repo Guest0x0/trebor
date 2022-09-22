@@ -29,7 +29,7 @@ let env_to_typ g level env ret_typ =
     |> Eval.eval g []
 
 
-let env_to_elim g level env =
+let env_to_elim level env =
     let args =
         env
         |> List.mapi (fun idx (_, typ, kind) -> typ, kind, stuck_local (level - idx - 1) typ)
@@ -59,10 +59,10 @@ let decompose_pair g meta elim =
             begin match typ with
             | TyPair(_, fst_typ, snd_typ) ->
                 let fst_meta = g#fresh_meta (env_to_typ g level env fst_typ) in
-                let fstV = Stuck(fst_typ, Meta("", fst_meta), env_to_elim g level env) in
+                let fstV = Stuck(fst_typ, Meta("", fst_meta), env_to_elim level env) in
                 let snd_typ = snd_typ fstV in
                 let snd_meta = g#fresh_meta (env_to_typ g level env snd_typ) in
-                let sndV = Stuck(snd_typ, Meta("", snd_meta), env_to_elim g level env) in
+                let sndV = Stuck(snd_typ, Meta("", snd_meta), env_to_elim level env) in
                 g#solve_meta meta' (close_value g level typ @@ Pair(fstV, sndV));
                 begin match field with
                 | `Fst -> (fst_typ, level, env, fst_meta, elim')
@@ -233,6 +233,53 @@ class context = object(self)
         done
 
 
+
+    method refine_to_function level env typ =
+        match typ with
+        | TyFun(_, Explicit, a, b) ->
+            (a, b)
+        | Stuck(Type ulevel, Meta _, _) ->
+            let arg_meta = self#fresh_meta (env_to_typ self level env @@ Type ulevel) in
+            let elim = env_to_elim level env in
+            let a = Stuck(Type ulevel, Meta("", arg_meta), elim) in
+            let env' = ("", a, `Bound) :: env in
+            let ret_meta = self#fresh_meta (env_to_typ self (level + 1) env' @@ Type ulevel) in
+            let b v = Stuck(Type ulevel, Meta("", ret_meta), App(elim, a, v)) in
+            self#subtyp level typ (TyFun("", Explicit, a, b));
+            (a, b)
+        | _ ->
+            raise UnificationFailure
+
+
+    method refine_to_pair level env typ =
+        match typ with
+        | TyPair(_, a, b) ->
+            (a, b)
+        | Stuck(Type ulevel, Meta _, _) ->
+            let fst_meta = self#fresh_meta (env_to_typ self level env @@ Type ulevel) in
+            let elim = env_to_elim level env in
+            let fst_typ = Stuck(Type ulevel, Meta("", fst_meta), elim) in
+            let env' = ("", fst_typ, `Bound) :: env in
+            let snd_meta = self#fresh_meta (env_to_typ self (level + 1) env' @@ Type ulevel) in
+            let snd_typ v = Stuck(Type ulevel, Meta("", snd_meta), App(elim, fst_typ, v)) in
+            self#subtyp level typ (TyPair("", fst_typ, snd_typ));
+            (fst_typ, snd_typ)
+        | _ ->
+            raise UnificationFailure
+
+
+    method insert_implicit level env core typ =
+        match typ with
+        | TyFun(_, Implicit, a, b) ->
+            let meta = self#fresh_meta (env_to_typ self level env a) in
+            let arg = Stuck(a, Meta("", meta), env_to_elim level env) in
+            self#insert_implicit level env
+                (Core.App(core, Quote.value_to_core self level a arg)) (b arg)
+        | _ ->
+            (core, typ)
+
+
+
     method private unify_value level typ v1 v2 =
         match force self typ, force self v1, force self v2 with
         | Type _, typv1, typv2 ->
@@ -354,6 +401,4 @@ class context = object(self)
 
         | _ ->
             raise UnificationFailure
-
-
 end

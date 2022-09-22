@@ -519,6 +519,28 @@ let test = fun (A : Type) ->
 
 
 
+register_test "implicit.basic.app" None "
+let id = fun {A : Type} (a : A) -> a
+
+let test = fun (A : Type) (a : A) -> id a
+" ;;
+
+register_test "implicit.basic.pair.1" None "
+let id = fun (A : Type) (a : A) -> a
+let diagonal = fun {A : Type} -> (A, A)
+
+let test = fun (A : Type) (a : A) -> id diagonal.1 a
+" ;;
+
+register_test "implicit.basic.pair.2" None "
+let id = fun (A : Type) (a : A) -> a
+let diagonal = fun {A : Type} -> (A, A)
+
+let test = fun (A : Type) (a : A) -> id diagonal.2 a
+" ;;
+
+
+
 register_test "examples.type-formers-resp-eq" None "
 let ap : forall (A B : Type 0) (a1 a2 : A) (f : A -> B) -> a1 = a2 -> f a1 = f a2
 let ap = fun A B a1 a2 f eq ->

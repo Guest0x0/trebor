@@ -117,14 +117,15 @@ let rec infer g ctx expr =
         , Core.Fun(name, kind, bodyC) )
 
     | Surface.App(func, arg) ->
-        begin match infer g ctx func with
-        | Value.TyFun(_, _, a, b), funcC ->
-            let argC = check "function application" g ctx a arg in
-            ( b (Eval.eval g ctx.venv argC)
-            , Core.App(funcC, argC) )
-        | typV, _ ->
-            wrong_type g ctx expr.span typV "function"
-        end
+        let func_typ0, funcC = infer g ctx func in
+        let funcC, func_typ = g#insert_implicit ctx.level ctx.tenv funcC func_typ0 in
+        let (a, b) =
+            try g#refine_to_function ctx.level ctx.tenv func_typ with
+              Unification.UnificationFailure ->
+                wrong_type g ctx expr.span func_typ0 "function"
+        in
+        let argC = check "function application" g ctx a arg in
+        ( b (Eval.eval g ctx.venv argC), Core.App(funcC, argC) )
 
     | Surface.TyPair(name, fst_typ, snd_typ) ->
         let ul_fst, fst_typC = check_typ g ctx fst_typ in
@@ -140,19 +141,19 @@ let rec infer g ctx expr =
         , Core.Pair(fstC, sndC) )
 
     | Surface.Proj(pair, field) ->
-        begin match infer g ctx pair with
-        | TyPair(_, fst_typ, snd_typ), pairC ->
-            begin match field with
-            | `Fst ->
-                ( fst_typ
-                , Core.Proj(pairC, field) )
-            | `Snd ->
-                let fstV = Eval.project (Eval.eval g ctx.venv pairC) `Fst in
-                ( snd_typ fstV
-                , Core.Proj(pairC, field) )
-            end
-        | typV, _ ->
-            wrong_type g ctx expr.span typV "pair"
+        let pair_typ0, pairC = infer g ctx pair in
+        let pairC, pair_typ = g#insert_implicit ctx.level ctx.tenv pairC pair_typ0 in
+        let (fst_typ, snd_typ) =
+            try g#refine_to_pair ctx.level ctx.tenv pair_typ with
+              Unification.UnificationFailure ->
+                wrong_type g ctx expr.span pair_typ0 "pair"
+        in
+        begin match field with
+        | `Fst ->
+            ( fst_typ, Core.Proj(pairC, field) )
+        | `Snd ->
+            let fstV = Eval.project (Eval.eval g ctx.venv pairC) `Fst in
+            ( snd_typ fstV, Core.Proj(pairC, field) )
         end
 
     | Surface.TyEq(lhs, rhs) ->
@@ -181,10 +182,11 @@ let rec infer g ctx expr =
 
     | Surface.Hole ->
         let typ_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv (Value.Type 0)) in
-        let elim = Unification.env_to_elim g ctx.level ctx.tenv in
+        let elim = Unification.env_to_elim ctx.level ctx.tenv in
         let typ = Value.Stuck(Type 0, Value.Meta("", typ_meta), elim) in
         let hole_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
         (typ, Quote.neutral_to_core g ctx.level (Value.Meta("", hole_meta)) elim)
+
 
 and check err_ctx g ctx typ expr =
     match typ, expr.shape with
@@ -230,7 +232,7 @@ and check err_ctx g ctx typ expr =
     | typ, Surface.Hole ->
         let meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
         Quote.neutral_to_core g ctx.level (Value.Meta("", meta))
-            (Unification.env_to_elim g ctx.level ctx.tenv)
+            (Unification.env_to_elim ctx.level ctx.tenv)
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
