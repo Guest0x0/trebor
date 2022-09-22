@@ -98,27 +98,27 @@ let rec infer g ctx expr =
         ( Eval.shift level typ
         , Core.Shift(level, core) )
 
-    | Surface.TyFun(name, a, b) ->
+    | Surface.TyFun(name, kind, a, b) ->
         let ul_a, ca = check_typ g ctx a in
         let va = Eval.eval g ctx.venv ca in
         let ul_b, cb = check_typ g (add_local name va ctx) b in
         ( Value.Type(max ul_a ul_b)
-        , Core.TyFun(name, ca, cb) )
+        , Core.TyFun(name, kind, ca, cb) )
 
-    | Surface.Fun(_, None, _) ->
+    | Surface.Fun(_, _, None, _) ->
         raise @@ Error.Error(expr.span, CannotInfer "function without parameter annotation")
 
-    | Surface.Fun(name, Some param_typ, body) ->
+    | Surface.Fun(name, kind, Some param_typ, body) ->
         let _, param_typC = check_typ g ctx param_typ in
         let param_typV = Eval.eval g ctx.venv param_typC in
         let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
         let _, ret_typC = Quote.typ_to_core g (ctx.level + 1) ret_typV in
-        ( Value.TyFun(name, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
-        , Core.Fun(name, bodyC) )
+        ( Value.TyFun(name, kind, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
+        , Core.Fun(name, kind, bodyC) )
 
     | Surface.App(func, arg) ->
         begin match infer g ctx func with
-        | Value.TyFun(_, a, b), funcC ->
+        | Value.TyFun(_, _, a, b), funcC ->
             let argC = check "function application" g ctx a arg in
             ( b (Eval.eval g ctx.venv argC)
             , Core.App(funcC, argC) )
@@ -202,7 +202,7 @@ and check err_ctx g ctx typ expr =
         let bodyC = check err_ctx g ctx' typ body in
         Core.Let(name, rhsC, bodyC)
 
-    | TyFun(_, param_typ, ret_typ), Surface.Fun(name, ann, body) ->
+    | TyFun(_, Explicit, param_typ, ret_typ), Surface.Fun(name, Explicit, ann, body) ->
         let param_typ =
             match ann with
             | Some ann ->
@@ -219,7 +219,7 @@ and check err_ctx g ctx typ expr =
         in
         let ret_typ = ret_typ @@ Value.stuck_local ctx.level param_typ in
         let bodyC = check err_ctx g (add_local name param_typ ctx) ret_typ body in
-        Core.Fun(name, bodyC)
+        Core.Fun(name, Explicit, bodyC)
 
     | TyPair(_, fst_typ, snd_typ), Surface.Pair(fst, snd) ->
         let fstC = check err_ctx g ctx fst_typ fst in

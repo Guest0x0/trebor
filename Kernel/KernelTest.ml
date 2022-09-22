@@ -33,9 +33,9 @@ let rec term_equal tm1 tm2 =
     | Type ulevel1       , Type ulevel2        -> ulevel1 = ulevel2
     | Shift(level1, tm1'), Shift(level2, tm2') -> level1 = level2 && term_equal tm1' tm2'
 
-    | TyFun(_, a1, b1), TyFun(_, a2, b2) -> term_equal a1 a2 && term_equal b1 b2
-    | Fun(_, body1)   , Fun(_, body2)    -> term_equal body1 body2
-    | App(f1, a1)     , App(f2, a2)      -> term_equal f1 f2 && term_equal a1 a2
+    | TyFun(_, k1, a1, b1), TyFun(_, k2, a2, b2) -> k1 = k2 && term_equal a1 a2 && term_equal b1 b2
+    | Fun(_, k1, body1)   , Fun(_, k2, body2)    -> k1 = k2 && term_equal body1 body2
+    | App(f1, a1)         , App(f2, a2)          -> term_equal f1 f2 && term_equal a1 a2
 
     | TyPair(_, a1, b1), TyPair(_, a2, b2) -> term_equal a1 a2 && term_equal b1 b2
     | Pair(fst1, snd1) , Pair(fst2, snd2)  -> term_equal fst1 fst2 && term_equal snd1 snd2

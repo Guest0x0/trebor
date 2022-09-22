@@ -1,12 +1,14 @@
 
 type meta = int
 
+type function_kind = Explicit | Implicit
+
 module Value = struct
     type value =
         | Stuck  of value * head * elimination
         | Type   of int
-        | TyFun  of string * value * (value -> value)
-        | Fun    of string * (value -> value)
+        | TyFun  of string * function_kind * value * (value -> value)
+        | Fun    of string * function_kind * (value -> value)
         | TyPair of string * value * (value -> value)
         | Pair   of value * value
         | TyEq   of (value * value) * (value * value)
@@ -15,7 +17,7 @@ module Value = struct
         | Local  of int
         | TopVar of int * string
         | Coe of
-              { ulevel : int
+              { ulevel  : int
               ; coerced : value
               ; lhs     : value
               ; rhs     : value
@@ -57,8 +59,8 @@ module Core = struct
         | Type   of int
         | Shift  of int * expr
 
-        | TyFun of string * expr * expr
-        | Fun   of string * expr
+        | TyFun of string * function_kind * expr * expr
+        | Fun   of string * function_kind * expr
         | App   of expr * expr
 
         | TyPair of string * expr * expr
@@ -108,8 +110,8 @@ module Surface = struct
         | Type   of int
         | Shift  of int * expr
 
-        | TyFun  of string * expr * expr
-        | Fun    of string * expr option * expr
+        | TyFun  of string * function_kind * expr * expr
+        | Fun    of string * function_kind * expr option * expr
         | App    of expr * expr
 
         | TyPair of string * expr * expr

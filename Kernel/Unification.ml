@@ -8,7 +8,7 @@ open Eval
 let rec make_fun n body =
     if n = 0
     then body
-    else make_fun (n - 1) (Core.Fun("", body))
+    else make_fun (n - 1) (Core.Fun("", Explicit, body))
 
 
 let close_value g level typ value =
@@ -24,7 +24,7 @@ let env_to_typ g level env ret_typ =
         (fun body (name, param_typ, kind) ->
                     match kind with
                     | `Defined -> body
-                    | `Bound   -> Core.TyFun(name, param_typ, body))
+                    | `Bound   -> Core.TyFun(name, Explicit, param_typ, body))
         ret_typC envC
     |> Eval.eval g []
 
@@ -49,7 +49,7 @@ let decompose_pair g meta elim =
         | App(elim', arg_typ, arg) ->
             let typ, level, env, meta', elim' = loop elim' in
             begin match typ with
-            | TyFun(_, a, b) ->
+            | TyFun(_, _, a, b) ->
                 b arg, level + 1, ("", a, `Bound) :: env, meta', App(elim', a, arg)
             | _  ->
                 raise RuntimeError
@@ -92,6 +92,7 @@ let add_boundvar ren =
 exception CannotSolveYet
 exception UnificationFailure
 
+
 let elim_to_renaming level elim =
     let rec loop = function
         | EmptyElim ->
@@ -123,9 +124,9 @@ let rec rename_value g m ren typ value =
     | Type _, value ->
         rename_typ g m ren value
 
-    | TyFun(name, a, b), _ ->
+    | TyFun(name, kind, a, b), _ ->
         let var = stuck_local ren.dom a in
-        Core.Fun(name, rename_value g m (add_boundvar ren) (b var) (apply value var))
+        Core.Fun(name, kind, rename_value g m (add_boundvar ren) (b var) (apply value var))
 
     | TyPair(_, a, b), _ ->
         let fst = project value `Fst in
@@ -171,8 +172,8 @@ and rename_typ g m ren = function
     | Type ulevel ->
         Core.Type ulevel
 
-    | TyFun(name, a, b) ->
-        Core.TyFun( name
+    | TyFun(name, kind, a, b) ->
+        Core.TyFun( name, kind
                   , rename_typ g m ren a
                   , rename_typ g m (add_boundvar ren) (b @@ stuck_local ren.dom a))
     | TyPair(name, a, b) ->
@@ -237,7 +238,7 @@ class context = object(self)
         | Type _, typv1, typv2 ->
             self#unify_typ_aux `Equal level typv1 typv2
 
-        | TyFun(name, a, b), f1, f2 ->
+        | TyFun(name, _, a, b), f1, f2 ->
             let var = stuck_local level a in
             self#unify_value (level + 1) (b var) (apply f1 var) (apply f2 var)
 
@@ -313,7 +314,7 @@ class context = object(self)
             | _                               -> raise UnificationFailure
             end
 
-        | TyFun (name, a1, b1), TyFun (_, a2, b2) ->
+        | TyFun (name, kind1, a1, b1), TyFun (_, kind2, a2, b2) when kind1 = kind2 ->
             self#unify_typ_aux mode level a2 a1;
             let var = stuck_local level a2 in
             self#unify_typ_aux mode (level + 1) (b1 var) (b2 var)

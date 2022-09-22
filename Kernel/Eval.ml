@@ -9,9 +9,9 @@ exception CannotShiftMeta
 
 let apply vf va =
     match vf with
-    | Fun  (_, f)                 -> f va
-    | Stuck(TyFun(_, a, b), h, e) -> Stuck(b va, h, App(e, a, va))
-    | _                           -> failwith "APPLY"; raise RuntimeError
+    | Fun  (_, _, f)                 -> f va
+    | Stuck(TyFun(_, _, a, b), h, e) -> Stuck(b va, h, App(e, a, va))
+    | _                              -> raise RuntimeError
 
 
 let project vpair field =
@@ -33,11 +33,11 @@ let rec shift level value =
     match value with
     | Stuck(typ, head, elim) ->
         Stuck (shift level typ, shift_head level head, shift_elim level elim)
-    | Type  ulevel       -> Type  (ulevel + level)
-    | TyFun (name, a, b) -> TyFun (name, shift level a, shift_func level b)
-    | Fun   (name, f)    -> Fun   (name, shift_func level f)
-    | TyPair(name, a, b) -> TyPair(name, shift level a, shift_func level b)
-    | Pair  (fst, snd)   -> Pair  (shift level fst, shift level snd)
+    | Type  ulevel             -> Type  (ulevel + level)
+    | TyFun (name, kind, a, b) -> TyFun (name, kind, shift level a, shift_func level b)
+    | Fun   (name, kind, f)    -> Fun   (name, kind, shift_func level f)
+    | TyPair(name, a, b)       -> TyPair(name, shift level a, shift_func level b)
+    | Pair  (fst, snd)         -> Pair  (shift level fst, shift level snd)
     | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
         TyEq((shift level lhs, shift level lhs_typ), (shift level rhs, shift level rhs_typ))
  
@@ -75,15 +75,15 @@ let rec coerce g ulevel coerced lhs rhs eq =
     | Type ulevel1, Type ulevel2 when ulevel1 = ulevel2 ->
         coerced
 
-    | TyFun(name1, a1, b1), TyFun(name2, a2, b2) ->
+    | TyFun(name1, kind1, a1, b1), TyFun(name2, kind2, a2, b2) when kind1 = kind2 ->
         let a2_eq_a1 = lazy(app_axiom g "eq-symm" ~shift:1
                 [ Type 0; Type 0; a1; a2
                 ; app_axiom g "fun-param-injective"
-                        [ a1; a2; Fun(name1, b1); Fun(name2, b2)
+                        [ a1; a2; Fun(name1, Explicit, b1); Fun(name2, Explicit, b2)
                         ; Lazy.force eq ] ])
         in
         let b1_eq_b2 x1 x2 x1_eq_x2 = app_axiom g "fun-ret-injective"
-                [ a1; a2; Fun(name1, b1); Fun(name2, b2); Lazy.force eq
+                [ a1; a2; Fun(name1, Explicit, b1); Fun(name2, Explicit, b2); Lazy.force eq
                 ; x1; x2; x1_eq_x2 ]
         in
         let f2 x2 =
@@ -94,17 +94,17 @@ let rec coerce g ulevel coerced lhs rhs eq =
             @@ lazy(b1_eq_b2 x1 x2 @@ app_axiom g "eq-symm"
                 [ a2; a1; x2; x1; x2_eq_x1 () ])
         in
-        Fun(name2, f2)
+        Fun(name2, kind2, f2)
 
     | TyPair(name1, a1, b1), TyPair(name2, a2, b2) ->
         let a1_eq_a2 = lazy(app_axiom g "pair-fst-injective"
-                [ a1; a2; Fun(name1, b1); Fun(name2, b2); Lazy.force eq ])
+                [ a1; a2; Fun(name1, Explicit, b1); Fun(name2, Explicit, b2); Lazy.force eq ])
         in
         let fst1 = project coerced `Fst in
         let fst2 = coerce g ulevel fst1 a1 a2 a1_eq_a2 in
         let fst1_eq_fst2 () = app_axiom g "coe-coherent" [ a1; a2; fst1; Lazy.force a1_eq_a2 ] in
         let b1_eq_b2 = lazy(app_axiom g "pair-snd-injective"
-                [ a1; a2; Fun(name1, b1); Fun(name2, b2); Lazy.force eq
+                [ a1; a2; Fun(name1, Explicit, b1); Fun(name2, Explicit, b2); Lazy.force eq
                 ; fst1; fst2; fst1_eq_fst2 () ])
         in
         let snd1 = project coerced `Snd in
@@ -146,8 +146,8 @@ let rec eval g env core =
     | Core.Type ulevel         -> Type ulevel
     | Core.Shift(level, core') -> shift level (eval g env core')
 
-    | Core.TyFun(name, a, b) -> TyFun(name, eval g env a, fun v -> eval g (v :: env) b)
-    | Core.Fun(name, body)   -> Fun(name, fun v -> eval g (v :: env) body)
+    | Core.TyFun(name, kind, a, b) -> TyFun(name, kind, eval g env a, fun v -> eval g (v :: env) b)
+    | Core.Fun(name, kind, body)   -> Fun(name, kind, fun v -> eval g (v :: env) body)
     | Core.App(func, arg)    -> apply (eval g env func) (eval g env arg)
 
     | Core.TyPair(name, a, b) -> TyPair(name, eval g env a, fun v -> eval g (v :: env) b)

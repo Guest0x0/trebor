@@ -87,16 +87,16 @@ expr :
         { mk_expr @@ Let(($2, Some $4, $6), $8) }
 
     | TOK_KW_FORALL param_list TOK_MINUS_GT expr
-        { List.fold_right (fun (name, typ) body -> mk_expr @@ TyFun(name, typ, body)) $2 $4 }
+        { List.fold_right (fun (name, kind, typ) body -> mk_expr @@ TyFun(name, kind, typ, body)) $2 $4 }
 
     | binop_expr TOK_MINUS_GT expr
-        { mk_expr @@ TyFun("", $1, $3) }
+        { mk_expr @@ TyFun("", Explicit, $1, $3) }
 
     | TOK_KW_FUN param_list_opt_ann TOK_MINUS_GT expr
-        { List.fold_right (fun (name, typ) body -> mk_expr @@ Fun(name, typ, body)) $2 $4 }
+        { List.fold_right (fun (name, kind, typ) body -> mk_expr @@ Fun(name, kind, typ, body)) $2 $4 }
 
-    | TOK_KW_EXISTS param_list TOK_MINUS_GT expr
-        { List.fold_right (fun (name, typ) body -> mk_expr @@ TyPair(name, typ, body)) $2 $4 }
+    | TOK_KW_EXISTS explicit_param_list TOK_MINUS_GT expr
+        { List.fold_right (fun (name, _, typ) body -> mk_expr @@ TyPair(name, typ, body)) $2 $4 }
 
     | error
         { error "expecting expression" }
@@ -173,16 +173,35 @@ param_list_opt_ann :
 ;
 
 
-param_decl :
+explicit_param_list :
+    | explicit_param_decl
+        { $1 }
+    | explicit_param_decl explicit_param_list
+        { $1 @ $2 }
+;
+
+
+explicit_param_decl :
     | TOK_LPAREN name_list_nonempty TOK_COLON expr TOK_RPAREN
-        { List.map (fun name -> (name, $4)) $2 }
+        { List.map (fun name -> (name, Explicit, $4)) $2 }
+;
+
+param_decl :
+    | explicit_param_decl
+        { $1 }
+    | TOK_LBRACE name_list_nonempty TOK_COLON expr TOK_RBRACE
+        { List.map (fun name -> (name, Implicit, $4)) $2 }
 ;
 
 param_decl_opt_ann :
     | TOK_LPAREN name_list_nonempty TOK_COLON expr TOK_RPAREN
-        { List.map (fun name -> (name, Some $4)) $2 }
+        { List.map (fun name -> (name, Explicit, Some $4)) $2 }
     | TOK_NAME
-        { [$1, None] }
+        { [$1, Explicit, None] }
+    | TOK_LBRACE name_list_nonempty TOK_COLON expr TOK_RBRACE
+        { List.map (fun name -> (name, Implicit, Some $4)) $2 }
+    | TOK_LBRACE name_list_nonempty TOK_RBRACE
+        { List.map (fun name -> name, Implicit, None) $2 }
 ;
 
 name_list_nonempty :
