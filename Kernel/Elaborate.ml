@@ -204,24 +204,21 @@ and check err_ctx g ctx typ expr =
         let bodyC = check err_ctx g ctx' typ body in
         Core.Let(name, rhsC, bodyC)
 
-    | TyFun(_, Explicit, param_typ, ret_typ), Surface.Fun(name, Explicit, ann, body) ->
+    | TyFun(_, kind1, param_typ, ret_typ), Surface.Fun(name, kind2, ann, body)
+        when kind1 = kind2 ->
         let param_typ =
             match ann with
-            | Some ann ->
-                let _, annC = check_typ g ctx ann in
-                let annV = Eval.eval g ctx.venv annC in
-                begin match g#subtyp ctx.level param_typ annV with
-                | () ->
-                    annV
-                | exception Unification.UnificationFailure ->
-                    type_mismatch g ctx ann.span param_typ annV "function annotation"
-                end
-            | None ->
-                param_typ
+            | Some ann -> check_annotation "function annotation" g ctx param_typ ann
+            | None     -> param_typ
         in
         let ret_typ = ret_typ @@ Value.stuck_local ctx.level param_typ in
         let bodyC = check err_ctx g (add_local name param_typ ctx) ret_typ body in
-        Core.Fun(name, Explicit, bodyC)
+        Core.Fun(name, kind1, bodyC)
+
+    | TyFun(name, Implicit, param_typ, ret_typ), _ ->
+        let var = Value.stuck_local ctx.level param_typ in
+        let exprC = check err_ctx g (add_local name param_typ ctx) (ret_typ var) expr in
+        Core.Fun(name, Implicit, exprC)
 
     | TyPair(_, fst_typ, snd_typ), Surface.Pair(fst, snd) ->
         let fstC = check err_ctx g ctx fst_typ fst in
@@ -236,6 +233,12 @@ and check err_ctx g ctx typ expr =
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
+        let exprC, actual_typ =
+            match typ with
+            | TyFun(_, Implicit, _, _)
+            | Stuck(_, Meta _, _) -> exprC, actual_typ
+            | _                   -> g#insert_implicit ctx.level ctx.tenv exprC actual_typ
+        in
         begin match g#subtyp ctx.level actual_typ typ with
         | () ->
             exprC
@@ -249,6 +252,17 @@ and check_typ g ctx expr =
         ulevel, exprC
     | typV, _ ->
         wrong_type g ctx expr.span typV "type"
+
+
+and check_annotation err_ctx g ctx typV ann =
+    let _, annC = check_typ g ctx ann in
+    let annV = Eval.eval g ctx.venv annC in
+    begin match g#subtyp ctx.level typV annV with
+    | () ->
+        annV
+    | exception Unification.UnificationFailure ->
+        type_mismatch g ctx ann.span typV annV err_ctx
+    end
 
 
 

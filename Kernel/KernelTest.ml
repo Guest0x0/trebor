@@ -525,18 +525,55 @@ let id = fun {A : Type} (a : A) -> a
 let test = fun (A : Type) (a : A) -> id a
 " ;;
 
-register_test "implicit.basic.pair.1" None "
+register_test "implicit.basic.proj.1" None "
 let id = fun (A : Type) (a : A) -> a
 let diagonal = fun {A : Type} -> (A, A)
 
 let test = fun (A : Type) (a : A) -> id diagonal.1 a
 " ;;
 
-register_test "implicit.basic.pair.2" None "
+register_test "implicit.basic.proj.2" None "
 let id = fun (A : Type) (a : A) -> a
 let diagonal = fun {A : Type} -> (A, A)
 
 let test = fun (A : Type) (a : A) -> id diagonal.2 a
+" ;;
+
+
+register_test "implicit.annotation" None "
+let id : forall {A : Type} -> A -> A
+let id = fun {A} a -> a
+" ;;
+
+register_test "implicit.insertion.basic" None "
+let Nat : Type
+let zero : Nat
+
+let need_id = fun (id : forall {A : Type} -> A -> A) -> id zero
+let test = need_id (fun a -> a)
+" ;;
+
+
+register_test "implicit.weak.1" None "
+let List : Type 1 -> Type 1
+let Nil  : forall {A : Type 1} -> List A
+let Cons : forall {A : Type 1} -> A -> List A -> List A
+
+let id = fun {A : Type} (a : A) -> a
+
+let test : List (forall {A : Type} -> A -> A)
+let test = Cons id Nil
+" ;;
+
+register_test "implicit.weak.2" None "
+let A : Type
+let B : A -> Type
+
+let f : forall {a : A} -> B a
+let g : forall {a : A} -> B a
+
+let eq : Type
+let eq = (f = g)
 " ;;
 
 
