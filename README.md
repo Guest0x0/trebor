@@ -116,7 +116,7 @@ In the surface syntax, you can only shift a globally defined variable.
 To shift more than one level, you can add the number of levels to shift after the "`~`",
 e.g. `~3 id`
 
-The implementation strategy comes from
+The implementation strategy comes from [[11]](#ref-11)
 
 
 
