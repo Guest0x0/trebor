@@ -25,6 +25,7 @@ let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 %token TOK_EQ
 %token TOK_COLON TOK_COLON_GT
 %token TOK_UNDERSCORE
+%token TOK_AT
 
 %token<string> TOK_NAME
 %token<int> TOK_INT
@@ -39,6 +40,7 @@ let error msg = raise (Error.Error(cur_span (), SyntaxError msg))
 %nonassoc TOK_EQ
 %left     TOK_COLON TOK_COLON_GT
 %left     TOK_TILDE
+%nonassoc TOK_AT
 %left     TOK_DOT
 
 
@@ -131,6 +133,9 @@ app_expr:
 ;
 
 atom_expr :
+    | TOK_LPAREN expr TOK_RPAREN
+        { $2 }
+
     | TOK_NAME
         { mk_expr @@ Var $1 }
 
@@ -152,8 +157,8 @@ atom_expr :
     | TOK_UNDERSCORE
         { mk_expr Hole }
 
-    | TOK_LPAREN expr TOK_RPAREN
-        { $2 }
+    | TOK_AT atom_expr
+        { mk_expr @@ Explicitfy $2 }
 ;
 
 

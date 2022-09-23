@@ -8,7 +8,7 @@ open Eval
 let rec make_fun n body =
     if n = 0
     then body
-    else make_fun (n - 1) (Core.Fun("", Explicit, body))
+    else make_fun (n - 1) (Core.Fun("", body))
 
 
 let close_value g level typ value =
@@ -124,9 +124,9 @@ let rec rename_value g m ren typ value =
     | Type _, value ->
         rename_typ g m ren value
 
-    | TyFun(name, kind, a, b), _ ->
+    | TyFun(name, _, a, b), _ ->
         let var = stuck_local ren.dom a in
-        Core.Fun(name, kind, rename_value g m (add_boundvar ren) (b var) (apply value var))
+        Core.Fun(name, rename_value g m (add_boundvar ren) (b var) (apply value var))
 
     | TyPair(_, a, b), _ ->
         let fst = project value `Fst in
@@ -266,17 +266,6 @@ class context = object(self)
             (fst_typ, snd_typ)
         | _ ->
             raise UnificationFailure
-
-
-    method insert_implicit level env core typ =
-        match typ with
-        | TyFun(_, Implicit, a, b) ->
-            let meta = self#fresh_meta (env_to_typ self level env a) in
-            let arg = Stuck(a, Meta("", meta), env_to_elim level env) in
-            self#insert_implicit level env
-                (Core.App(core, Quote.value_to_core self level a arg)) (b arg)
-        | _ ->
-            (core, typ)
 
 
 

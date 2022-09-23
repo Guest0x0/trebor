@@ -41,6 +41,7 @@ rule token = parse
     | '='     { TOK_EQ }
     | ":>"    { TOK_COLON_GT }
     | '_'     { TOK_UNDERSCORE }
+    | '@'     { TOK_AT }
     | dex_digit+
         { TOK_INT(int_of_string (Lexing.lexeme lexbuf)) }
     | (name_head)(name_char*)

@@ -59,9 +59,9 @@ let rec pp_core ctx fmt core =
         fprintf fmt "@[<hov2>forall %a@]"
             (pp_core_tyfun { ctx with prec = prec_binder }) (name, kind, a, b)
 
-    | Core.Fun(name, kind, body) when ctx.prec <= prec_binder ->
+    | Core.Fun(name, body) when ctx.prec <= prec_binder ->
         fprintf fmt "@[<hov2>fun %a@]"
-            (pp_core_fun { ctx with prec = prec_binder }) (name, kind, body)
+            (pp_core_fun { ctx with prec = prec_binder }) (name, body)
 
     | Core.App(f, a) when ctx.prec <= prec_app ->
         fprintf fmt "@[<hov2>%a@]" (pp_core_app { ctx with prec = prec_app }) (f, a)
@@ -125,15 +125,12 @@ and pp_core_typair ctx fmt (name, a, b) =
     | Core.TyPair(name', a', b') -> fprintf fmt "@ %a" (pp_core_typair ctx') (name', a', b')
     | _                          -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
-and pp_core_fun ctx fmt (name, kind, body) =
+and pp_core_fun ctx fmt (name, body) =
     let name, ctx' = add_var name ctx in
-    begin match kind with
-    | Explicit -> fprintf fmt "%s" name
-    | Implicit -> fprintf fmt "{%s}" name
-    end; 
+    fprintf fmt "%s" name;
     match body with
-    | Core.Fun(name', kind', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', kind', body')
-    | _                             -> fprintf fmt " ->@ %a" (pp_core ctx') body
+    | Core.Fun(name', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', body')
+    | _                      -> fprintf fmt " ->@ %a" (pp_core ctx') body
 
 
 and pp_core_pair ctx fmt (fst, snd) =

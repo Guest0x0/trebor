@@ -114,11 +114,11 @@ let rec infer g ctx expr =
         let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
         let _, ret_typC = Quote.typ_to_core g (ctx.level + 1) ret_typV in
         ( Value.TyFun(name, kind, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
-        , Core.Fun(name, kind, bodyC) )
+        , Core.Fun(name, bodyC) )
 
     | Surface.App(func, arg) ->
         let func_typ0, funcC = infer g ctx func in
-        let funcC, func_typ = g#insert_implicit ctx.level ctx.tenv funcC func_typ0 in
+        let func_typ, funcC = Implicit.elim_implicit g ctx.level ctx.tenv funcC func_typ0 in
         let (a, b) =
             try g#refine_to_function ctx.level ctx.tenv func_typ with
               Unification.UnificationFailure ->
@@ -142,7 +142,7 @@ let rec infer g ctx expr =
 
     | Surface.Proj(pair, field) ->
         let pair_typ0, pairC = infer g ctx pair in
-        let pairC, pair_typ = g#insert_implicit ctx.level ctx.tenv pairC pair_typ0 in
+        let pair_typ, pairC = Implicit.elim_implicit g ctx.level ctx.tenv pairC pair_typ0 in
         let (fst_typ, snd_typ) =
             try g#refine_to_pair ctx.level ctx.tenv pair_typ with
               Unification.UnificationFailure ->
@@ -187,6 +187,10 @@ let rec infer g ctx expr =
         let hole_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
         (typ, Quote.neutral_to_core g ctx.level (Value.Meta("", hole_meta)) elim)
 
+    | Surface.Explicitfy expr' ->
+        let typ, exprC = infer g ctx expr' in
+        Implicit.explicitfy typ, exprC
+
 
 and check err_ctx g ctx typ expr =
     match typ, expr.shape with
@@ -213,12 +217,12 @@ and check err_ctx g ctx typ expr =
         in
         let ret_typ = ret_typ @@ Value.stuck_local ctx.level param_typ in
         let bodyC = check err_ctx g (add_local name param_typ ctx) ret_typ body in
-        Core.Fun(name, kind1, bodyC)
+        Core.Fun(name, bodyC)
 
     | TyFun(name, Implicit, param_typ, ret_typ), _ ->
         let var = Value.stuck_local ctx.level param_typ in
         let exprC = check err_ctx g (add_local name param_typ ctx) (ret_typ var) expr in
-        Core.Fun(name, Implicit, exprC)
+        Core.Fun(name, exprC)
 
     | TyPair(_, fst_typ, snd_typ), Surface.Pair(fst, snd) ->
         let fstC = check err_ctx g ctx fst_typ fst in
@@ -233,11 +237,11 @@ and check err_ctx g ctx typ expr =
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
-        let exprC, actual_typ =
+        let actual_typ, exprC =
             match typ with
             | TyFun(_, Implicit, _, _)
-            | Stuck(_, Meta _, _) -> exprC, actual_typ
-            | _                   -> g#insert_implicit ctx.level ctx.tenv exprC actual_typ
+            | Stuck(_, Meta _, _) -> actual_typ, exprC
+            | _                   -> Implicit.elim_implicit g ctx.level ctx.tenv exprC actual_typ
         in
         begin match g#subtyp ctx.level actual_typ typ with
         | () ->

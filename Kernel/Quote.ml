@@ -9,9 +9,9 @@ let rec value_to_core g level typ value =
     match force g typ, force g value with
     | Type _, _ ->
         snd (typ_to_core g level value)
-    | TyFun(name, kind, a, b), vf ->
+    | TyFun(name, _, a, b), vf ->
         let var = stuck_local level a in
-        Core.Fun(name, kind, value_to_core g (level + 1) (b var) (apply vf var))
+        Core.Fun(name, value_to_core g (level + 1) (b var) (apply vf var))
 
     | TyPair(_, a, b), vp ->
         let fst = project vp `Fst in

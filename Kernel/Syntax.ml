@@ -8,7 +8,7 @@ module Value = struct
         | Stuck  of value * head * elimination
         | Type   of int
         | TyFun  of string * function_kind * value * (value -> value)
-        | Fun    of string * function_kind * (value -> value)
+        | Fun    of string * (value -> value)
         | TyPair of string * value * (value -> value)
         | Pair   of value * value
         | TyEq   of (value * value) * (value * value)
@@ -60,7 +60,7 @@ module Core = struct
         | Shift  of int * expr
 
         | TyFun of string * function_kind * expr * expr
-        | Fun   of string * function_kind * expr
+        | Fun   of string * expr
         | App   of expr * expr
 
         | TyPair of string * expr * expr
@@ -122,6 +122,7 @@ module Surface = struct
         | Coe    of expr * expr
 
         | Hole
+        | Explicitfy of expr
 
 
     type env = (string * expr * [`Bound | `Defined]) list

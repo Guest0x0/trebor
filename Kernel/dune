@@ -1,7 +1,7 @@
 
 (library
  (name kernel)
- (modules Syntax Context Eval Quote Unification Elaborate Parser Lexer Pretty Prelude))
+ (modules Syntax Context Eval Quote Unification Implicit Elaborate Parser Lexer Pretty Prelude))
 
 (test
  (name KernelTest)
