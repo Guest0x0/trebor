@@ -191,6 +191,10 @@ let rec infer g ctx expr =
         let typ, exprC = infer g ctx expr' in
         Implicit.explicitfy typ, exprC
 
+    | Surface.ElimImplicit expr' ->
+        let typ, exprC = infer g ctx expr' in
+        Implicit.elim_implicit g ctx.level ctx.tenv exprC typ
+
 
 and check err_ctx g ctx typ expr =
     match typ, expr.shape with
@@ -239,7 +243,6 @@ and check err_ctx g ctx typ expr =
         let actual_typ, exprC = infer g ctx expr in
         let actual_typ, exprC =
             match typ with
-            | TyFun(_, Implicit, _, _)
             | Stuck(_, Meta _, _) -> actual_typ, exprC
             | _                   -> Implicit.elim_implicit g ctx.level ctx.tenv exprC actual_typ
         in

@@ -122,7 +122,8 @@ module Surface = struct
         | Coe    of expr * expr
 
         | Hole
-        | Explicitfy of expr
+        | Explicitfy   of expr
+        | ElimImplicit of expr
 
 
     type env = (string * expr * [`Bound | `Defined]) list

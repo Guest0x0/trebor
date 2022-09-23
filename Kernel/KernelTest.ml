@@ -554,29 +554,6 @@ let test = need_id (fun a -> a)
 " ;;
 
 
-register_test "implicit.weak.1" None "
-let List : Type 1 -> Type 1
-let Nil  : forall {A : Type 1} -> List A
-let Cons : forall {A : Type 1} -> A -> List A -> List A
-
-let id = fun {A : Type} (a : A) -> a
-
-let test : List (forall {A : Type} -> A -> A)
-let test = Cons id Nil
-" ;;
-
-register_test "implicit.weak.2" None "
-let A : Type
-let B : A -> Type
-
-let f : forall {a : A} -> B a
-let g : forall {a : A} -> B a
-
-let eq : Type
-let eq = (f = g)
-" ;;
-
-
 register_test "implicit.explicitfy" None "
 let id = fun {A : Type} (a : A) -> a
 
@@ -588,6 +565,46 @@ let a : A
 
 let test1 = @id _ a
 let test2 = @id A a
+" ;;
+
+
+
+
+register_test "implicit.weak.1" None "
+let A : Type
+let B : A -> Type
+
+let f : forall {a : A} -> B a
+let g : forall {a : A} -> B a
+
+let eq : Type
+let eq = (f = g)
+" ;;
+
+
+register_test "implicit.weak.2" None "
+let List : Type 1 -> Type 1
+let Nil  : forall {A : Type 1} -> List A
+let Cons : forall {A : Type 1} -> A -> List A -> List A
+
+let id = fun {A : Type} (a : A) -> a
+
+let list-of-id = Cons id Nil
+
+let test : List (forall {A : Type} -> A -> A)
+let test = list-of-id
+" ;;
+
+
+register_test "implicit.manual-elim" None "
+let List : Type 1 -> Type 1
+let Nil  : forall {A : Type 1} -> List A
+let Cons : forall {A : Type 1} -> A -> List A -> List A
+
+let id = fun {A : Type} (a : A) -> a
+
+let test : forall (A : Type) -> List (A -> A)
+let test = fun A -> Cons @{id} Nil
 " ;;
 
 

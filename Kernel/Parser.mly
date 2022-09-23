@@ -159,6 +159,9 @@ atom_expr :
 
     | TOK_AT atom_expr
         { mk_expr @@ Explicitfy $2 }
+
+    | TOK_AT TOK_LBRACE expr TOK_RBRACE
+        { mk_expr @@ ElimImplicit $3 }
 ;
 
 
