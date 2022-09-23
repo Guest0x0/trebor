@@ -4,7 +4,6 @@ open Value
 
 
 exception RuntimeError
-exception CannotShiftMeta
 
 
 let apply vf va =
@@ -29,43 +28,9 @@ let project vpair field =
 
 
 
-let rec shift level value =
-    match value with
-    | Stuck(typ, head, elim) ->
-        Stuck (shift level typ, shift_head level head, shift_elim level elim)
-    | Type  ulevel             -> Type  (ulevel + level)
-    | TyFun (name, kind, a, b) -> TyFun (name, kind, shift level a, shift_func level b)
-    | Fun   (name, f)          -> Fun   (name, shift_func level f)
-    | TyPair(name, a, b)       -> TyPair(name, shift level a, shift_func level b)
-    | Pair  (fst, snd)         -> Pair  (shift level fst, shift level snd)
-    | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
-        TyEq((shift level lhs, shift level lhs_typ), (shift level rhs, shift level rhs_typ))
- 
-and shift_head level = function
-    | Local _ as head      -> head
-    | TopVar(level', name) -> TopVar(level + level', name)
-    | Coe { ulevel; coerced; lhs; rhs; eq } ->
-        Coe { ulevel  = ulevel + level
-            ; coerced = shift level coerced
-            ; lhs     = shift level lhs
-            ; rhs     = shift level rhs
-            ; eq      = lazy(shift level (Lazy.force eq)) }
-    | Meta _ ->
-        raise CannotShiftMeta
- 
-and shift_elim level = function
-    | EmptyElim as elim         -> elim
-    | App (elim', arg_typ, arg) -> App(shift_elim level elim', shift level arg_typ, shift level arg)
-    | Proj(elim', field)        -> Proj(shift_elim level elim', field)
- 
-and shift_func level f = fun v ->
-    v |> shift (- level) |> f |> shift level
-
-
-
 let app_axiom g axiom ?(shift=0) args =
     match g#find_global axiom with
-    | AxiomDecl typ -> List.fold_left apply (Stuck(typ, TopVar(shift, axiom), EmptyElim)) args
+    | AxiomDecl typ -> List.fold_left apply (Stuck(typ shift, TopVar(shift, axiom), EmptyElim)) args
     | Definition _  -> raise RuntimeError
 
 
@@ -133,36 +98,60 @@ let rec force g value =
 
 
 
-let rec eval g env core =
+let rec eval g shift env core =
     match core with
     | Core.TopVar name ->
         begin match g#find_global name with
-        | AxiomDecl typ        -> Stuck(typ, TopVar(0, name), EmptyElim)
-        | Definition(_, value) -> value
+        | AxiomDecl typ        -> Stuck(typ shift, TopVar(0, name), EmptyElim)
+        | Definition(_, value) -> value shift
         end
     | Core.Local idx         -> List.nth env idx
-    | Core.Let(_, rhs, body) -> eval g (eval g env rhs :: env) body
+    | Core.Let(_, rhs, body) -> eval g shift (eval g shift env rhs :: env) body
 
-    | Core.Type ulevel         -> Type ulevel
-    | Core.Shift(level, core') -> shift level (eval g env core')
+    | Core.Type ulevel          -> Type (ulevel + shift)
+    | Core.Shift(shift', core') -> eval g (shift + shift') env core'
 
-    | Core.TyFun(name, kind, a, b) -> TyFun(name, kind, eval g env a, fun v -> eval g (v :: env) b)
-    | Core.Fun(name, body)         -> Fun(name, fun v -> eval g (v :: env) body)
-    | Core.App(func, arg)          -> apply (eval g env func) (eval g env arg)
+    | Core.TyFun(name, kind, a, b) -> TyFun( name, kind
+                                           , eval g shift env a
+                                           , fun v -> eval g shift (v :: env) b)
+    | Core.Fun(name, body) -> Fun(name, fun v -> eval g shift (v :: env) body)
+    | Core.App(func, arg)  -> apply (eval g shift env func) (eval g shift env arg)
 
-    | Core.TyPair(name, a, b) -> TyPair(name, eval g env a, fun v -> eval g (v :: env) b)
-    | Core.Pair(fst, snd)     -> Pair(eval g env fst, eval g env snd)
-    | Core.Proj(pair, field)  -> project (eval g env pair) field
+    | Core.TyPair(name, a, b) -> TyPair( name
+                                       , eval g shift env a
+                                       , fun v -> eval g shift (v :: env) b )
+    | Core.Pair(fst, snd)     -> Pair(eval g shift env fst, eval g shift env snd)
+    | Core.Proj(pair, field)  -> project (eval g shift env pair) field
 
     | Core.TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
-        TyEq( (eval g env lhs, eval g env lhs_typ)
-            , (eval g env rhs, eval g env rhs_typ))
+        TyEq( (eval g shift env lhs, eval g shift env lhs_typ)
+            , (eval g shift env rhs, eval g shift env rhs_typ))
     | Core.Coe { ulevel; coerced; lhs; rhs; eq } ->
-        coerce g ulevel (eval g env coerced) (eval g env lhs) (eval g env rhs)
-            (lazy(eval g env @@ Lazy.force eq))
+        coerce g ulevel (eval g shift env coerced) (eval g shift env lhs) (eval g shift env rhs)
+            (lazy(eval g shift env @@ Lazy.force eq))
 
     | Core.Meta(name, meta) ->
+        if shift <> 0 then
+            raise RuntimeError;
         begin match g#find_meta meta with
         | Free typ     -> Stuck(typ, Meta(name, meta), EmptyElim)
         | Solved(_, v) -> v
         end
+
+
+let eval_poly g env core =
+    let value0 = eval g 0 env core in
+    let values = ref [] in
+    let poly s =
+        if s = 0
+        then value0
+        else
+            match List.assoc s !values with
+            | value ->
+                value
+            | exception Not_found -> 
+                let value = eval g s env core in
+                values := (s, value) :: !values;
+                value
+    in
+    poly

@@ -4,12 +4,14 @@ open Eval
 
 type context =
     { level : int
+    ; shift : int
     ; venv  : Value.value list
     ; tenv  : Value.env }
 
 
 let empty_ctx =
     { level = 0
+    ; shift = 0
     ; venv  = []
     ; tenv  = [] }
 
@@ -21,6 +23,7 @@ let add_local name typ ?value ctx =
         | None       -> Value.stuck_local ctx.level typ, `Bound
     in
     { level = ctx.level + 1
+    ; shift = ctx.shift
     ; venv  = value :: ctx.venv
     ; tenv  = (name, typ, kind) :: ctx.tenv }
 
@@ -53,16 +56,19 @@ let type_mismatch g ctx span expected actual err_ctx =
 
 let rec infer g ctx expr =
     match expr.Surface.shape with
-    | Surface.Var name ->
+    | Surface.Var(s, name) ->
         begin match find_local name ctx with
         | idx, typ ->
-            ( typ
-            , Core.Local idx )
+            if s <> 0 then
+                raise @@ Error.Error(expr.span, Error.CanOnlyShiftGlobal);
+            ( typ, Core.Local idx )
         | exception Not_found ->
             match g#find_global name with
             | Value.(AxiomDecl typ | Definition(typ, _)) ->
-                ( typ
-                , Core.TopVar name )
+                ( typ s, 
+                    if s = 0
+                    then Core.TopVar name
+                    else Core.Shift(s, Core.TopVar name) )
             | exception Not_found ->
                 raise @@ Error.Error(expr.span, UnboundVar name)
         end
@@ -72,12 +78,12 @@ let rec infer g ctx expr =
             match ann with
             | Some ann ->
                 let _, c_ann = check_typ g ctx ann in
-                let rhs_typ = Eval.eval g ctx.venv c_ann in
+                let rhs_typ = Eval.eval g 0 ctx.venv c_ann in
                 (rhs_typ, check "type annotation" g ctx rhs_typ rhs)
             | None ->
                 infer g ctx rhs
         in
-        let ctx' = add_local name rhs_typ ~value:(Eval.eval g ctx.venv c_rhs) ctx in
+        let ctx' = add_local name rhs_typ ~value:(Eval.eval g 0 ctx.venv c_rhs) ctx in
         let res_typ, c_body = infer g ctx' body in
         ( res_typ
         , Core.Let(name, c_rhs, c_body ) )
@@ -85,22 +91,16 @@ let rec infer g ctx expr =
 
     | Surface.Ann(expr, typ) ->
         let _, ctyp = check_typ g ctx typ in
-        let typV = Eval.eval g ctx.venv ctyp in
+        let typV = Eval.eval g 0 ctx.venv ctyp in
         let exprC = check "type annotation" g ctx typV expr in
         ( typV, exprC )
 
     | Surface.Type ulevel ->
-        ( Type(ulevel + 1)
-        , Core.Type ulevel )
-
-    | Surface.Shift(level, expr') ->
-        let typ, core = infer g ctx expr' in
-        ( Eval.shift level typ
-        , Core.Shift(level, core) )
+        ( Type(ulevel + 1), Core.Type ulevel )
 
     | Surface.TyFun(name, kind, a, b) ->
         let ul_a, ca = check_typ g ctx a in
-        let va = Eval.eval g ctx.venv ca in
+        let va = Eval.eval g 0 ctx.venv ca in
         let ul_b, cb = check_typ g (add_local name va ctx) b in
         ( Value.Type(max ul_a ul_b)
         , Core.TyFun(name, kind, ca, cb) )
@@ -110,10 +110,10 @@ let rec infer g ctx expr =
 
     | Surface.Fun(name, kind, Some param_typ, body) ->
         let _, param_typC = check_typ g ctx param_typ in
-        let param_typV = Eval.eval g ctx.venv param_typC in
+        let param_typV = Eval.eval g 0 ctx.venv param_typC in
         let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
         let _, ret_typC = Quote.typ_to_core g (ctx.level + 1) ret_typV in
-        ( Value.TyFun(name, kind, param_typV, fun v -> Eval.eval g (v :: ctx.venv) ret_typC)
+        ( Value.TyFun(name, kind, param_typV, fun v -> Eval.eval g 0 (v :: ctx.venv) ret_typC)
         , Core.Fun(name, bodyC) )
 
     | Surface.App(func, arg) ->
@@ -125,11 +125,11 @@ let rec infer g ctx expr =
                 wrong_type g ctx expr.span func_typ0 "function"
         in
         let argC = check "function application" g ctx a arg in
-        ( b (Eval.eval g ctx.venv argC), Core.App(funcC, argC) )
+        ( b (Eval.eval g 0 ctx.venv argC), Core.App(funcC, argC) )
 
     | Surface.TyPair(name, fst_typ, snd_typ) ->
         let ul_fst, fst_typC = check_typ g ctx fst_typ in
-        let fst_typV  = Eval.eval g ctx.venv fst_typC in
+        let fst_typV  = Eval.eval g 0 ctx.venv fst_typC in
         let ul_snd, snd_typC = check_typ g (add_local name fst_typV ctx) snd_typ in
         ( Type(max ul_fst ul_snd)
         , Core.TyPair(name, fst_typC, snd_typC) )
@@ -152,7 +152,7 @@ let rec infer g ctx expr =
         | `Fst ->
             ( fst_typ, Core.Proj(pairC, field) )
         | `Snd ->
-            let fstV = Eval.project (Eval.eval g ctx.venv pairC) `Fst in
+            let fstV = Eval.project (Eval.eval g 0 ctx.venv pairC) `Fst in
             ( snd_typ fstV, Core.Proj(pairC, field) )
         end
 
@@ -203,12 +203,12 @@ and check err_ctx g ctx typ expr =
             match ann with
             | Some ann ->
                 let _, annC = check_typ g ctx ann in
-                let rhs_typ = Eval.eval g ctx.venv annC in
+                let rhs_typ = Eval.eval g 0 ctx.venv annC in
                 (rhs_typ, check "type annotation" g ctx rhs_typ rhs)
             | None ->
                 infer g ctx rhs
         in
-        let ctx' = add_local name rhs_typ ~value:(Eval.eval g ctx.venv rhsC) ctx in
+        let ctx' = add_local name rhs_typ ~value:(Eval.eval g 0 ctx.venv rhsC) ctx in
         let bodyC = check err_ctx g ctx' typ body in
         Core.Let(name, rhsC, bodyC)
 
@@ -230,7 +230,7 @@ and check err_ctx g ctx typ expr =
 
     | TyPair(_, fst_typ, snd_typ), Surface.Pair(fst, snd) ->
         let fstC = check err_ctx g ctx fst_typ fst in
-        let fstV = Eval.eval g ctx.venv fstC in
+        let fstV = Eval.eval g 0 ctx.venv fstC in
         let sndC = check err_ctx g ctx (snd_typ fstV) snd in
         Core.Pair(fstC, sndC)
 
@@ -263,7 +263,7 @@ and check_typ g ctx expr =
 
 and check_annotation err_ctx g ctx typV ann =
     let _, annC = check_typ g ctx ann in
-    let annV = Eval.eval g ctx.venv annC in
+    let annV = Eval.eval g 0 ctx.venv annC in
     begin match g#subtyp ctx.level typV annV with
     | () ->
         annV
@@ -280,7 +280,7 @@ let rec check_env g env =
     | (name, typ, kind) :: env' ->
         let elab_ctx, envC = check_env g env' in
         let _, typC = check_typ g elab_ctx typ in
-        ( add_local name (Eval.eval g elab_ctx.venv typC) elab_ctx
+        ( add_local name (Eval.eval g 0 elab_ctx.venv typC) elab_ctx
         , (name, typC, kind) :: envC )
 
 
@@ -299,25 +299,25 @@ let check_top_level g (span, top) =
     | Surface.AxiomDecl(name, typ) ->
         let _, typC = check_typ g empty_ctx typ in
         flush_meta span g;
-        begin try g#add_global_decl name (Eval.eval g [] typC) with
+        begin try g#add_global_decl name (Eval.eval_poly g [] typC) with
         | Context.RedefineGlobal -> raise (Error.Error (span, RedeclareVar name))
         end;
         Core.AxiomDecl(name, typC)
 
     | Surface.Definition(name, typ, def) ->
-        let typV, typC, defC =
+        let typC, defC =
             match typ with
             | Some typ ->
                 let _, typC = check_typ g empty_ctx typ in
-                let typV = Eval.eval g [] typC in
-                (typV, typC, check "global definition" g empty_ctx typV def)
+                let typV = Eval.eval g 0 [] typC in
+                (typC, check "global definition" g empty_ctx typV def)
             | None ->
                 let typV, defC = infer g empty_ctx def in
                 let _, typC = Quote.typ_to_core g 0 typV in
-                (typV, typC, defC)
+                (typC, defC)
         in
         flush_meta span g;
-        g#add_global_def name typV (Eval.eval g [] defC);
+        g#add_global_def name (Eval.eval_poly g [] typC) (Eval.eval_poly g [] defC);
         Core.Definition(name, typC, defC)
 
 

@@ -137,16 +137,19 @@ atom_expr :
         { $2 }
 
     | TOK_NAME
-        { mk_expr @@ Var $1 }
+        { mk_expr @@ Var(0, $1) }
+
+    | TOK_TILDE TOK_NAME
+        { mk_expr @@ Var(1, $2) }
+
+    | TOK_TILDE TOK_INT TOK_NAME
+        { mk_expr @@ Var($2, $3) }
 
     | TOK_KW_TYPE
         { mk_expr @@ Type 0 }
 
     | TOK_KW_TYPE TOK_INT
         { mk_expr @@ Type $2 }
-
-    | TOK_TILDE atom_expr
-        { mk_expr @@ Shift(1, $2) }
 
     | atom_expr TOK_DOT TOK_INT
         { match $3 with

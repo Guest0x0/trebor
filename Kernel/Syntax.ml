@@ -42,8 +42,8 @@ module Value = struct
 
 
     type top_level =
-        | AxiomDecl  of value
-        | Definition of value * value
+        | AxiomDecl  of (int -> value)
+        | Definition of (int -> value )* (int -> value)
 
 
     let stuck_local level typ = Stuck(typ, Local level, EmptyElim) [@@inline]
@@ -103,12 +103,11 @@ module Surface = struct
         ; span  : span }
 
     and expr_shape =
-        | Var    of string
+        | Var    of int * string
         | Ann    of expr * expr
         | Let    of (string * expr option * expr) * expr
 
         | Type   of int
-        | Shift  of int * expr
 
         | TyFun  of string * function_kind * expr * expr
         | Fun    of string * function_kind * expr option * expr
@@ -147,6 +146,7 @@ module Error = struct
         | TypeMismatch of Core.env * Core.expr * Core.expr * string
         | RedeclareVar of string
         | RedefineVar  of string
+        | CanOnlyShiftGlobal
         | UnsolvedMeta of (meta * Core.meta_info) list
 
     exception Error of span * error

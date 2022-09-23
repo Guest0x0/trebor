@@ -82,6 +82,22 @@ let error_equal globals err1 err2 =
         && term_equal expected1 expected2
         && term_equal actual1 actual2
         && err_ctx1 = err_ctx2
+    | RedeclareVar var1 , RedeclareVar var2  -> var1 = var2
+    | RedefineVar  var1 , RedefineVar  var2  -> var1 = var2
+    | CanOnlyShiftGlobal, CanOnlyShiftGlobal -> true
+    | UnsolvedMeta ms1  , UnsolvedMeta ms2   ->
+        List.for_all2
+            (fun (m1, info1) (m2, info2) ->
+                            m1 = m2 &&
+                            match info1, info2 with
+                            | Core.Free typ1, Core.Free typ2 ->
+                                term_equal typ1 typ2
+                            | Core.Solved(typ1, val1), Core.Solved(typ2, val2) ->
+                                term_equal typ1 typ2 && term_equal val1 val2
+                            | _ ->
+                                false)
+            ms1 ms2
+
     | _ ->
         false
 
@@ -397,7 +413,7 @@ let Sigma : exists (A : Type 2) ->  Type 2
 let Sigma = (Type 0, Type 0)
 
 let Eq : (Type 0 : Type 2) = (Type 0 : Type 2)
-let Eq = ~~eq-refl (Type 1) (Type 0)
+let Eq = ~2 eq-refl (Type 1) (Type 0)
 " ;;
 
 
@@ -414,15 +430,27 @@ let id-id = ~id type-of-id id
 register_test "universe.poly.relevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> x) = Type 1
-let eq = ~~~eq-refl (Type 2) (Type 1)
+let eq = ~3 eq-refl (Type 2) (Type 1)
 " ;;
 
 register_test "universe.poly.irrelevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> Type 1) = Type 1
-let eq = ~~~eq-refl (Type 2) (Type 1)
+let eq = ~3 eq-refl (Type 2) (Type 1)
 " ;;
 
+register_test "universe.poly.shift-applied-to-meta" None "
+let ID = forall {A : Type} -> A -> A
+
+let id : ID
+let id = fun a -> a
+
+let test = ~id id
+" ;;
+
+register_test "universe.poly.can-only-shift-top" (Some CanOnlyShiftGlobal) "
+let test = fun (f : Type -> Type) -> ~f Type
+" ;;
 
 
 register_test "elab.hole.basic" None "

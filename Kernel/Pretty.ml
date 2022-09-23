@@ -200,8 +200,9 @@ let pp_error verbose fmt err =
         fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
         fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_env verbose) env
-    | Error.RedeclareVar name -> fprintf fmt "re-declaring %s" name
-    | Error.RedefineVar  name -> fprintf fmt "re-defining %s" name
+    | Error.RedeclareVar name  -> fprintf fmt "re-declaring %s" name
+    | Error.RedefineVar  name  -> fprintf fmt "re-defining %s" name
+    | Error.CanOnlyShiftGlobal -> fprintf fmt "only global definitions can be shifted"
     | Error.UnsolvedMeta metas ->
         let pp_entry fmt (meta, info) =
             match info with

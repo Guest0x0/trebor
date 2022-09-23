@@ -11,6 +11,7 @@ to implement some full-scale type checker/dependently typed language.
 
 - [Observational Equality](#Observational-Equality)
 - [Universe Polymorphism a là Conor McBride](#Universe-Polymorphism)
+- Holes and first class implicit functions
 
 
 ## Observational Equality
@@ -110,7 +111,12 @@ no level variables needed
 
 - *enlarging* a small type (i.e. "shift to higher", universe polymorphism)
 is done via a explicit operator `~`.
-The operator accumulates on global variables and is structural on all other term formers
+The operator accumulates on global variables and is structural on all other term formers.
+In the surface syntax, you can only shift a globally defined variable.
+To shift more than one level, you can add the number of levels to shift after the "`~`",
+e.g. `~3 id`
+
+The implementation strategy comes from
 
 
 
@@ -149,3 +155,6 @@ Equality, Quasi-Implicit Products, and Large Eliminations
 
 <a id="ref-10" href="https://pigworker.wordpress.com/2015/01/09/universe-hierarchies/">[10]</a>
 <https://pigworker.wordpress.com/2015/01/09/universe-hierarchies/>
+
+<a id="ref-11" href="http://www-sop.inria.fr/members/Damien.Rouhling/data/internships/M1Report.pdf">[11]</a>
+Dependently typed lambda calculus with a lifting operator

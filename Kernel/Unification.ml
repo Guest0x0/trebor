@@ -13,7 +13,7 @@ let rec make_fun n body =
 
 let close_value g level typ value =
     let body = Quote.value_to_core g level typ value in
-    Eval.eval g [] @@ make_fun level body
+    Eval.eval g 0 [] @@ make_fun level body
 
 
 
@@ -26,7 +26,7 @@ let env_to_typ g level env ret_typ =
                     | `Defined -> body
                     | `Bound   -> Core.TyFun(name, Explicit, param_typ, body))
         ret_typC envC
-    |> Eval.eval g []
+    |> Eval.eval g 0 []
 
 
 let env_to_elim level env =
@@ -298,7 +298,7 @@ class context = object(self)
                 let ren = elim_to_renaming level elim in
                 let body = rename_value self meta ren typ v in
                 let sol = make_fun ren.cod body in
-                self#solve_meta meta (Eval.eval self [] sol);
+                self#solve_meta meta (Eval.eval self 0 [] sol);
                 progressed <- true
             with CannotSolveYet ->
                 equations <- (fun () -> self#unify_value level typ v1 v2) :: equations;
@@ -377,7 +377,7 @@ class context = object(self)
                 let meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
                 let sol = make_fun ren.cod (rename_typ  self meta ren v) in
-                self#solve_meta meta (Eval.eval self [] sol);
+                self#solve_meta meta (Eval.eval self 0 [] sol);
                 progressed <- true
             with CannotSolveYet ->
                 equations <- (fun () -> self#unify_typ_aux mode level sub sup) :: equations;
