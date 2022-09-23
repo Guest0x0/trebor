@@ -202,6 +202,11 @@ let decompose_pair g meta elim =
 
 
 
+type equation =
+    { level : int
+    ; mode  : [`Value of value | `Type]
+    ; lhs   : value
+    ; rhs   : value }
 
 
 class context = object(self)
@@ -229,7 +234,7 @@ class context = object(self)
                 progressed <- false;
                 equations <- [];
                 try
-                    eq ();
+                    self#try_equation eq;
                     equations <- List.rev_append not_yet eqs'
                 with CannotSolveYet ->
                     if progressed
@@ -240,6 +245,13 @@ class context = object(self)
             make_progress [] equations
         done
 
+    method private try_equation eq =
+        match eq.mode with
+        | `Value typ -> self#unify_value eq.level typ eq.lhs eq.rhs
+        | `Type      -> self#unify_typ_aux `Equal eq.level eq.lhs eq.rhs
+
+
+    method dump_equations = equations
 
 
     method refine_to_function level env typ =
@@ -296,7 +308,7 @@ class context = object(self)
             ()
 
         | _, Stuck(_, Meta _, _), Stuck(_, Meta _, _) ->
-            equations <- (fun () -> self#unify_value level typ v1 v2) :: equations;
+            equations <- { level; mode = `Value typ; lhs = v1; rhs = v2 } :: equations;
             raise CannotSolveYet
 
         | _, Stuck(_, Meta(_, meta), elim), v
@@ -309,7 +321,7 @@ class context = object(self)
                 self#solve_meta meta (Eval.eval self 0 [] sol);
                 progressed <- true
             with CannotSolveYet ->
-                equations <- (fun () -> self#unify_value level typ v1 v2) :: equations;
+                equations <- { level; mode = `Value typ; lhs = v1; rhs = v2 } :: equations;
                 raise CannotSolveYet
             end
 
@@ -376,7 +388,7 @@ class context = object(self)
             self#unify_value level rhs_typ1 rhs1 rhs2
 
         | Stuck(_, Meta _, _), Stuck(_, Meta _, _) ->
-            equations <- (fun () -> self#unify_typ_aux mode level sub sup) :: equations;
+            equations <- { level; mode = `Type; lhs = sub; rhs = sup } :: equations;
             raise CannotSolveYet
 
         | Stuck(_, Meta(_, meta), elim), v
@@ -388,7 +400,7 @@ class context = object(self)
                 self#solve_meta meta (Eval.eval self 0 [] sol);
                 progressed <- true
             with CannotSolveYet ->
-                equations <- (fun () -> self#unify_typ_aux mode level sub sup) :: equations;
+                equations <- { level; mode = `Type; lhs = sub; rhs = sup } :: equations;
                 raise CannotSolveYet
             end
 

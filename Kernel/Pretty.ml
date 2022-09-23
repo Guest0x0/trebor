@@ -203,7 +203,7 @@ let pp_error verbose fmt err =
     | Error.RedeclareVar name  -> fprintf fmt "re-declaring %s" name
     | Error.RedefineVar  name  -> fprintf fmt "re-defining %s" name
     | Error.CanOnlyShiftGlobal -> fprintf fmt "only global definitions can be shifted"
-    | Error.UnsolvedMeta metas ->
+    | Error.UnsolvedMeta(metas, eqs) ->
         let pp_entry fmt (meta, info) =
             match info with
             | Core.Free typ ->
@@ -211,8 +211,16 @@ let pp_error verbose fmt err =
             | Core.Solved(_, value) ->
                 fprintf fmt "?%d := %a" meta (pp_core ~verbose []) value
         in
-        fprintf fmt "@[<v2>unsolved meta:@ %a@]"
-            (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ ") pp_entry) metas
+        let pp_equation fmt (level, lhs, rhs) =
+            let names = List.init level (fun idx -> "$" ^ string_of_int (level - idx - 1)) in
+            fprintf fmt "@[<hov2>%a@ = %a@]"
+                (pp_core ~verbose names) lhs
+                (pp_core ~verbose names) lhs
+        in
+        fprintf fmt "@[<v>@[<v2>unsolved meta:@ %a@]@ "
+            (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ ") pp_entry) metas;
+        fprintf fmt "@[<v2>unsolved equations:@ %a@]@]"
+            (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ ") pp_equation) eqs
 
 
 let pp_exception verbose fmt exn =

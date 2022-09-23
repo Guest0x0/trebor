@@ -298,7 +298,16 @@ let flush_meta span g =
         let metas = g#dump_metas |> List.map @@ fun (meta, info) ->
             (meta, Quote.meta_info_to_core g info)
         in
-        raise @@ Error.Error(span, Error.UnsolvedMeta metas)
+        let eqs = g#dump_equations |> List.map @@ fun eq ->
+            match eq.Unification.mode with
+            | `Value typ -> ( eq.level
+                            , Quote.value_to_core g eq.level typ eq.lhs
+                            , Quote.value_to_core g eq.level typ eq.rhs )
+            | `Type      -> ( eq.level
+                            , snd @@ Quote.typ_to_core g eq.level eq.lhs
+                            , snd @@ Quote.typ_to_core g eq.level eq.rhs )
+        in
+        raise @@ Error.Error(span, Error.UnsolvedMeta(metas, eqs))
 
 
 let check_top_level g (span, top) =

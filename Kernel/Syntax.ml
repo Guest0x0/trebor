@@ -147,7 +147,7 @@ module Error = struct
         | RedeclareVar of string
         | RedefineVar  of string
         | CanOnlyShiftGlobal
-        | UnsolvedMeta of (meta * Core.meta_info) list
+        | UnsolvedMeta of (meta * Core.meta_info) list * (int * Core.expr * Core.expr) list
 
     exception Error of span * error
 end

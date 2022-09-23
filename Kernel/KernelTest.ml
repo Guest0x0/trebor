@@ -85,7 +85,7 @@ let error_equal globals err1 err2 =
     | RedeclareVar var1 , RedeclareVar var2  -> var1 = var2
     | RedefineVar  var1 , RedefineVar  var2  -> var1 = var2
     | CanOnlyShiftGlobal, CanOnlyShiftGlobal -> true
-    | UnsolvedMeta ms1  , UnsolvedMeta ms2   ->
+    | UnsolvedMeta(ms1, _), UnsolvedMeta(ms2, _) ->
         List.for_all2
             (fun (m1, info1) (m2, info2) ->
                             m1 = m2 &&
