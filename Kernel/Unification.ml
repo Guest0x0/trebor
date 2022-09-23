@@ -4,90 +4,17 @@ open Value
 open Eval
 
 
-
-let rec make_fun n body =
-    if n = 0
-    then body
-    else make_fun (n - 1) (Core.Fun("", body))
-
-
-let close_value g level typ value =
-    let body = Quote.value_to_core g level typ value in
-    Eval.eval g 0 [] @@ make_fun level body
-
-
-
-let env_to_typ g level env ret_typ =
-    let _, ret_typC = Quote.typ_to_core g level ret_typ in
-    let envC = Quote.env_to_core g env in
-    List.fold_left
-        (fun body (name, param_typ, kind) ->
-                    match kind with
-                    | `Defined -> body
-                    | `Bound   -> Core.TyFun(name, Explicit, param_typ, body))
-        ret_typC envC
-    |> Eval.eval g 0 []
-
-
-let env_to_elim level env =
-    let args =
-        env
-        |> List.mapi (fun idx (_, typ, kind) -> typ, kind, stuck_local (level - idx - 1) typ)
-        |> List.filter_map (fun (typ, kind, arg) -> if kind = `Bound then Some(typ, arg) else None)
-    in
-    List.fold_right (fun (typ, arg) elim -> App(elim, typ, arg)) args EmptyElim
-
-
-let decompose_pair g meta elim =
-    let rec loop elim =
-        match elim with
-        | EmptyElim ->
-            begin match g#find_meta meta with
-            | Free typ -> typ, 0, [], meta, elim
-            | _        -> raise RuntimeError
-            end
-        | App(elim', arg_typ, arg) ->
-            let typ, level, env, meta', elim' = loop elim' in
-            begin match typ with
-            | TyFun(_, _, a, b) ->
-                b arg, level + 1, ("", a, `Bound) :: env, meta', App(elim', a, arg)
-            | _  ->
-                raise RuntimeError
-            end
-        | Proj(elim', field) ->
-            let typ, level, env, meta', elim' = loop elim' in
-            begin match typ with
-            | TyPair(_, fst_typ, snd_typ) ->
-                let fst_meta = g#fresh_meta (env_to_typ g level env fst_typ) in
-                let fstV = Stuck(fst_typ, Meta("", fst_meta), env_to_elim level env) in
-                let snd_typ = snd_typ fstV in
-                let snd_meta = g#fresh_meta (env_to_typ g level env snd_typ) in
-                let sndV = Stuck(snd_typ, Meta("", snd_meta), env_to_elim level env) in
-                g#solve_meta meta' (close_value g level typ @@ Pair(fstV, sndV));
-                begin match field with
-                | `Fst -> (fst_typ, level, env, fst_meta, elim')
-                | `Snd -> (snd_typ, level, env, snd_meta, elim')
-                end
-            | _ ->
-                raise RuntimeError
-            end
-    in
-    let _, _, _, meta', elim' = loop elim in
-    meta', elim'
-
-
-
 type renaming =
     { dom : int
     ; cod : int
     ; map : (int * neutral) list }
 
+let empty_renaming = { dom = 0; cod = 0; map = [] }
+
 let add_boundvar ren =
     { dom = ren.dom + 1
     ; cod = ren.cod + 1
     ; map = (ren.dom, (Local ren.cod, EmptyElim)) :: ren.map }
-
-
 
 exception CannotSolveYet
 exception UnificationFailure
@@ -168,7 +95,8 @@ and rename_neutral g m ren head = function
         Core.Proj(rename_neutral g m ren head elim', field)
 
 
-and rename_typ g m ren = function
+and rename_typ g m ren value =
+    match Eval.force g value with
     | Type ulevel ->
         Core.Type ulevel
 
@@ -190,6 +118,86 @@ and rename_typ g m ren = function
 
     | _ ->
         raise RuntimeError
+
+
+
+
+let rec make_fun n body =
+    if n = 0
+    then body
+    else make_fun (n - 1) (Core.Fun("", body))
+
+
+let close_value g level typ value =
+    let body = Quote.value_to_core g level typ value in
+    Eval.eval g 0 [] @@ make_fun level body
+
+
+
+let env_to_typ g level (env : Value.env) ret_typ =
+    let add_entry (name, typ, kind) (ren, level, params) =
+        match kind with
+        | `Bound   -> ( add_boundvar ren
+                      , level + 1
+                      , (name, rename_typ g level ren typ) :: params )
+        | `Defined -> ( { ren with dom = ren.dom + 1 }
+                      , level + 1
+                      , params )
+    in
+    let ren, _, params = List.fold_right add_entry env (empty_renaming, 0, []) in
+    let ret_typC = rename_typ g level ren ret_typ in
+    List.fold_left
+        (fun body (name, param_typ) -> Core.TyFun(name, Explicit, param_typ, body))
+        ret_typC params
+    |> Eval.eval g 0 []
+
+
+let env_to_elim level env =
+    let args =
+        env
+        |> List.mapi (fun idx (_, typ, kind) -> typ, kind, stuck_local (level - idx - 1) typ)
+        |> List.filter_map (fun (typ, kind, arg) -> if kind = `Bound then Some(typ, arg) else None)
+    in
+    List.fold_right (fun (typ, arg) elim -> App(elim, typ, arg)) args EmptyElim
+
+
+let decompose_pair g meta elim =
+    let rec loop elim =
+        match elim with
+        | EmptyElim ->
+            begin match g#find_meta meta with
+            | Free typ -> typ, 0, [], meta, elim
+            | _        -> raise RuntimeError
+            end
+        | App(elim', arg_typ, arg) ->
+            let typ, level, env, meta', elim' = loop elim' in
+            begin match typ with
+            | TyFun(_, _, a, b) ->
+                b arg, level + 1, ("", a, `Bound) :: env, meta', App(elim', a, arg)
+            | _  ->
+                raise RuntimeError
+            end
+        | Proj(elim', field) ->
+            let typ, level, env, meta', elim' = loop elim' in
+            begin match typ with
+            | TyPair(_, fst_typ, snd_typ) ->
+                let fst_meta = g#fresh_meta (env_to_typ g level env fst_typ) in
+                let fstV = Stuck(fst_typ, Meta("", fst_meta), env_to_elim level env) in
+                let snd_typ = snd_typ fstV in
+                let snd_meta = g#fresh_meta (env_to_typ g level env snd_typ) in
+                let sndV = Stuck(snd_typ, Meta("", snd_meta), env_to_elim level env) in
+                g#solve_meta meta' (close_value g level typ @@ Pair(fstV, sndV));
+                begin match field with
+                | `Fst -> (fst_typ, level, env, fst_meta, elim')
+                | `Snd -> (snd_typ, level, env, snd_meta, elim')
+                end
+            | _ ->
+                raise RuntimeError
+            end
+    in
+    let _, _, _, meta', elim' = loop elim in
+    meta', elim'
+
 
 
 
@@ -235,7 +243,7 @@ class context = object(self)
 
 
     method refine_to_function level env typ =
-        match typ with
+        match Eval.force self typ with
         | TyFun(_, Explicit, a, b) ->
             (a, b)
         | Stuck(Type ulevel, Meta _, _) ->
@@ -252,7 +260,7 @@ class context = object(self)
 
 
     method refine_to_pair level env typ =
-        match typ with
+        match Eval.force self typ with
         | TyPair(_, a, b) ->
             (a, b)
         | Stuck(Type ulevel, Meta _, _) ->

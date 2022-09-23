@@ -243,35 +243,35 @@ let coe = fun A B eq a -> a :> eq
 
 
 register_test "defeq.refl" None "
-let my-refl : forall (A : Type 0) (a : A) -> a = a
-let my-refl = fun A a -> eq-refl A a
+let my-refl : forall (A : Type) (a : A) -> a = a
+let my-refl = fun A a -> @eq-refl A a
 " ;;
 
 register_test "defeq.global" None "
 let g = fun (A : Type) (a : A) -> a
 
 let g-def : g = (fun (A : Type) (a : A) -> a)
-let g-def = ~eq-refl (forall (A : Type) -> A -> A) g
+let g-def = ~eq-refl g
 " ;;
 
 register_test "defeq.let" None "
 let eq : forall (A B : Type) (f : A -> A -> A) (x : A) ->
     (let ff = fun (x : A) -> f x x in ff (ff (ff x)))
     = f (f (f x x) (f x x)) (f (f x x) (f x x))
-let eq = fun A B f x -> eq-refl A (let ff = fun (x : A) -> f x x in ff (ff (ff x)))
+let eq = fun A B f x -> ~eq-refl (let ff = fun (x : A) -> f x x in ff (ff (ff x)))
 " ;;
 
 
 register_test "defeq.fun.beta" None "
-let beta-id : forall (A : Type 0) (a : A) -> (fun (x : A) -> x) a = a
-let beta-id = fun A a -> eq-refl A a
+let beta-id : forall (A : Type) (a : A) -> (fun (x : A) -> x) a = a
+let beta-id = fun A a -> ~eq-refl a
 " ;;
 
 register_test "defeq.fun.beta.under-binder" None "
 let danger : forall (A : Type 0) ->
     (fun (x : A) -> (fun (y : A) (x : A) -> y) x)
     = (fun (x : A) (y : A) -> x)
-let danger = fun A -> eq-refl (A -> A -> A) (fun (x : A) (y : A) -> x)
+let danger = fun A -> ~eq-refl (fun (x : A) (y : A) -> x)
 " ;;
 
 register_test "defeq.fun.beta.under-binder-counter" (Some(
@@ -283,30 +283,30 @@ register_test "defeq.fun.beta.under-binder-counter" (Some(
 let bad : forall (A : Type 0) ->
     (fun (x : A) -> (fun (y : A) (x : A) -> y) x)
     = (fun (x : A) (y : A) -> y)
-let bad = fun A -> eq-refl (A -> A -> A) (fun (x : A) (y : A) -> x)
+let bad = fun A -> ~eq-refl (fun (x : A) (y : A) -> x)
 " ;;
 
 
 register_test "defeq.fun.eta" None "
 let fun-eta : forall (A : Type 0) (B : A -> Type 0) ->
     forall (f : forall (a : A) -> B a) -> f = (fun (a : A) -> f a)
-let fun-eta = fun A B f -> eq-refl (forall (a : A) -> B a) f
+let fun-eta = fun A B f -> ~eq-refl f
 " ;;
 
 
 
 register_test "defeq.pair.beta" None "
 let eq-fst : forall (A : Type) (B : A -> Type) (a : A) (b : B a) -> (a, b).1 = a
-let eq-fst = fun A B a b -> eq-refl A a
+let eq-fst = fun A B a b -> ~eq-refl a
 
 let eq-snd : forall (A : Type) (B : A -> Type) (a : A) (b : B a) -> (a, b).2 = b
-let eq-snd = fun A B a b -> eq-refl (B a) b
+let eq-snd = fun A B a b -> ~eq-refl b
 " ;;
 
 register_test "defeq.pair.eta" None "
 let pair-eta : forall (A : Type 0) (B : A -> Type 0) ->
     forall (p : exists (a : A) -> B a) -> p = (p.1, p.2) : (exists (a : A) -> B a)
-let pair-eta = fun A B p -> eq-refl (exists (a : A) -> B a) p
+let pair-eta = fun A B p -> ~eq-refl p
 " ;;
 
 
@@ -315,13 +315,13 @@ let pair-eta = fun A B p -> eq-refl (exists (a : A) -> B a) p
 register_test "defeq.equality.UIP" None "
 let UIP : forall (A : Type 0) (B : Type 0) (a : A) (b : B) ->
     forall (p : a = b) (q : a = b) -> p = q
-let UIP = fun A B a b p q -> eq-refl (a = b) p
+let UIP = fun A B a b p q -> eq-refl p
 " ;;
 
 
 register_test "defeq.coe.type" None "
 let eq : forall (p : Type = Type) (A : Type) -> A :> p = A
-let eq = fun p A -> ~eq-refl Type A
+let eq = fun p A -> ~eq-refl A
 " ;;
 
 register_test "defeq.coe.fun" None "
@@ -329,13 +329,13 @@ let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     forall (eq : (forall (a : A1) -> B1 a) = (forall (a : A2) -> B2 a)) ->
     forall (f : forall (a : A1) -> B1 a) ->
         f :> eq = (fun (a2 : A2) ->
-            let eqA = ~eq-symm Type Type A1 A2 (fun-param-injective A1 A2 B1 B2 eq) in
+            let eqA = ~eq-symm (@fun-param-injective A1 A2 B1 B2 eq) in
             let a1  = a2 :> eqA in 
-            let eqB = fun-ret-injective A1 A2 B1 B2 eq a1 a2
-                (eq-symm A2 A1 a2 a1 (coe-coherent A2 A1 a2 eqA))
+            let eqB = @fun-ret-injective A1 A2 B1 B2 eq a1 a2
+                (eq-symm (coe-coherent a2 eqA))
             in
             f a1 :> eqB)
-let goal = fun A1 A2 B1 B2 eq f -> eq-refl (forall (a : A2) -> B2 a) (f :> eq)
+let goal = fun A1 A2 B1 B2 eq f -> eq-refl (f :> eq)
 " ;;
 
 register_test "defeq.coe.pair" None "
@@ -346,10 +346,10 @@ let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
             let eqA = pair-fst-injective A1 A2 B1 B2 eq in
             let a1 = pair.1 in
             let a2 = a1 :> eqA in
-            let eqB = pair-snd-injective A1 A2 B1 B2 eq a1 a2 (coe-coherent A1 A2 a1 eqA) in
+            let eqB = pair-snd-injective A1 A2 B1 B2 eq a1 a2 (coe-coherent a1 eqA) in
             (a2, pair.2 :> eqB) : (exists (a : A2) -> B2 a)
         )
-let goal = fun A1 A2 B1 B2 eq pair -> eq-refl (exists (a : A2) -> B2 a) (pair :> eq)
+let goal = fun A1 A2 B1 B2 eq pair -> eq-refl (pair :> eq)
 " ;;
 
 
@@ -413,7 +413,7 @@ let Sigma : exists (A : Type 2) ->  Type 2
 let Sigma = (Type 0, Type 0)
 
 let Eq : (Type 0 : Type 2) = (Type 0 : Type 2)
-let Eq = ~2 eq-refl (Type 1) (Type 0)
+let Eq = ~2 eq-refl (Type 0)
 " ;;
 
 
@@ -430,13 +430,13 @@ let id-id = ~id type-of-id id
 register_test "universe.poly.relevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> x) = Type 1
-let eq = ~3 eq-refl (Type 2) (Type 1)
+let eq = ~3 eq-refl (Type 1)
 " ;;
 
 register_test "universe.poly.irrelevant-arg" None "
 let f = fun (A : Type 2) (f : Type 1 -> A) -> f (Type 0)
 let eq : ~f (Type 2) (fun x -> Type 1) = Type 1
-let eq = ~3 eq-refl (Type 2) (Type 1)
+let eq = ~3 eq-refl (Type 1)
 " ;;
 
 register_test "universe.poly.shift-applied-to-meta" None "
@@ -448,7 +448,7 @@ let id = fun a -> a
 let test = ~id id
 " ;;
 
-register_test "universe.poly.can-only-shift-top" (Some CanOnlyShiftGlobal) "
+register_test "universe.poly.can-only-shift-global" (Some CanOnlyShiftGlobal) "
 let test = fun (f : Type -> Type) -> ~f Type
 " ;;
 
@@ -460,12 +460,12 @@ let test = id _ Type
 
 register_test "elab.hole.type-from-term" None "
 let eq : forall (A : Type) (a : A) -> a = _
-let eq = eq-refl
+let eq = @eq-refl
 " ;;
 
 register_test "elab.hole.term-from-type" None "
 let my-refl : forall (A : Type) (a : A) -> a = a
-let my-refl = fun A a -> eq-refl _ _
+let my-refl = fun A a -> @eq-refl _ _
 " ;;
 
 
@@ -478,13 +478,20 @@ let test =
     fun (A : Type) (a : A) -> id (apply Type Type f A) a
 " ;;
 
-register_test "unify.let" None "
-let apply = fun (A B : Type 1) (f : A -> B) (x : A) -> f x
+register_test "unify.let-defined-meta" None "
 let id = fun (A : Type) (a : A) -> a
 
 let test = fun (A : Type) ->
     let T = _ : Type in
     fun (a : A) -> id T a
+" ;;
+
+register_test "unify.meta-under-let" None "
+let id = fun (A : Type) (a : A) -> a
+
+let test = fun (A : Type) ->
+    let B : Type = A in
+    fun (a : B) -> id _ a
 " ;;
 
 register_test "unify.meta-is-pair.arg-pair" None "
@@ -581,6 +588,16 @@ let need_id = fun (id : forall {A : Type} -> A -> A) -> id zero
 let test = need_id (fun a -> a)
 " ;;
 
+register_test "implicit.insertion.reinsert" None "
+let swap = fun {A : Type} {B : Type} (p : A * B) -> (p.2, p.1)
+
+let A : Type
+let B : Type
+
+let need_swap_with_A = fun (f : forall {B : Type} -> A * B -> B * A) -> Type
+let test = need_swap_with_A swap
+" ;;
+
 
 register_test "implicit.explicitfy" None "
 let id = fun {A : Type} (a : A) -> a
@@ -598,7 +615,7 @@ let test2 = @id A a
 
 
 
-register_test "implicit.weak.1" None "
+register_test "implicit.lazy.infer" None "
 let A : Type
 let B : A -> Type
 
@@ -610,7 +627,7 @@ let eq = (f = g)
 " ;;
 
 
-register_test "implicit.weak.2" None "
+register_test "implicit.lazy.checked-with-meta" None "
 let List : Type 1 -> Type 1
 let Nil  : forall {A : Type 1} -> List A
 let Cons : forall {A : Type 1} -> A -> List A -> List A
@@ -640,7 +657,7 @@ let test = fun A -> Cons @{id} Nil
 register_test "examples.type-formers-resp-eq" None "
 let ap : forall (A B : Type 0) (a1 a2 : A) (f : A -> B) -> a1 = a2 -> f a1 = f a2
 let ap = fun A B a1 a2 f eq ->
-    apply-resp-eq A A (fun a -> B) (fun a -> B) f f (eq-refl (A -> B) f) a1 a2 eq
+    apply-resp-eq A A (fun a -> B) (fun a -> B) f f (eq-refl f) a1 a2 eq
 
 
 let fun-type-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
@@ -678,7 +695,7 @@ let type-of-bad = forall (A : Type 0) -> A = (A -> A) -> A
 
 let bad : type-of-bad
 let bad = fun A eq ->
-    omega A eq (omega A eq :> ~eq-symm (Type 0) (Type 0) A (A -> A) eq)
+    omega A eq (omega A eq :> ~eq-symm eq)
 " ;;
 
 

@@ -1,16 +1,16 @@
 
 let prelude_src = "
-let eq-refl  : forall (A : Type 0) (a : A) -> a = a
-let eq-symm  : forall (A B : Type 0) (a : A) (b : B) -> a = b -> b = a
-let eq-trans : forall (A B C : Type 0) (a : A) (b : B) (c : C) -> a = b -> b = c -> a = c
+let eq-refl  : forall {A : Type} (a : A) -> a = a
+let eq-symm  : forall {A B : Type} {a : A} {b : B} -> a = b -> b = a
+let eq-trans : forall {A B C : Type} {a : A} {b : B} {c : C} -> a = b -> b = c -> a = c
 
 
-let coe-coherent : forall (A B : Type 0) (a : A) (eq : A = B) -> a = a :> eq
+let coe-coherent : forall {A B : Type} (a : A) (eq : A = B) -> a = a :> eq
 
-let fun-param-injective : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
+let fun-param-injective : forall {A1 A2 : Type} {B1 : A1 -> Type} {B2 : A2 -> Type} ->
     (forall (a1 : A1) -> B1 a1) = (forall (a2 : A2) -> B2 a2) -> A1 = A2
 
-let fun-ret-injective : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
+let fun-ret-injective : forall {A1 A2 : Type} {B1 : A1 -> Type} {B2 : A2 -> Type} ->
     (forall (a1 : A1) -> B1 a1) = (forall (a2 : A2) -> B2 a2) ->
         forall (a1 : A1) (a2 : A2) -> a1 = a2 -> B1 a1 = B2 a2
 

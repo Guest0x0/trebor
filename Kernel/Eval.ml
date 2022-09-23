@@ -134,7 +134,7 @@ let rec eval g shift env core =
         if shift <> 0 then
             raise RuntimeError;
         begin match g#find_meta meta with
-        | Free typ     -> Stuck(typ, Meta(name, meta), EmptyElim)
+        | Free typ     -> Stuck(force g typ, Meta(name, meta), EmptyElim)
         | Solved(_, v) -> v
         end
 

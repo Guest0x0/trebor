@@ -165,19 +165,26 @@ let rec infer g ctx expr =
         , Core.TyEq((lhsC, lhs_typC), (rhsC, rhs_typC)) )
 
     | Surface.Coe(coerced, eq) ->
-        begin match infer g ctx eq with
-        | TyEq((lhs, Type ul_lhs), (rhs, Type ul_rhs)), eqC ->
-            let coercedC = check "coerced value" g ctx lhs coerced in
-            let _, lhsC = Quote.typ_to_core g ctx.level lhs in
-            let _, rhsC = Quote.typ_to_core g ctx.level rhs in
-            ( rhs
-            , Core.Coe { ulevel  = max ul_lhs ul_rhs
-                       ; coerced = coercedC
-                       ; lhs     = lhsC
-                       ; rhs     = rhsC
-                       ; eq      = Lazy.from_val eqC } )
-        | typV, _ ->
-            wrong_type g ctx expr.span typV "equality"
+        let eq_typ0, eqC = infer g ctx eq in
+        let eq_typ , eqC = Implicit.elim_implicit g ctx.level ctx.tenv eqC eq_typ0 in
+        begin match eq_typ with
+        | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
+            begin match Eval.force g lhs_typ, Eval.force g rhs_typ with
+            | Type ul_lhs, Type ul_rhs ->
+                let coercedC = check "coerced value" g ctx lhs coerced in
+                let _, lhsC = Quote.typ_to_core g ctx.level lhs in
+                let _, rhsC = Quote.typ_to_core g ctx.level rhs in
+                ( rhs
+                , Core.Coe { ulevel  = max ul_lhs ul_rhs
+                           ; coerced = coercedC
+                           ; lhs     = lhsC
+                           ; rhs     = rhsC
+                           ; eq      = Lazy.from_val eqC } )
+            | _ ->
+                wrong_type g ctx expr.span eq_typ0 "equality between types"
+            end
+        | _ ->
+            wrong_type g ctx expr.span eq_typ0 "equality"
         end
 
     | Surface.Hole ->
@@ -189,7 +196,7 @@ let rec infer g ctx expr =
 
     | Surface.Explicitfy expr' ->
         let typ, exprC = infer g ctx expr' in
-        Implicit.explicitfy typ, exprC
+        Implicit.explicitfy g typ, exprC
 
     | Surface.ElimImplicit expr' ->
         let typ, exprC = infer g ctx expr' in
