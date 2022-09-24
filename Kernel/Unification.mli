@@ -25,8 +25,9 @@ class context : object
     method solve_all : unit
     method dump_equations : equation list
 
-    method subtyp    : int -> value -> value -> unit
-    method unify_typ : int -> value -> value -> unit 
+    method subtyp      : int -> value -> value -> unit
+    method unify_typ   : int -> value -> value -> unit 
+    method unify_value : int -> value -> value -> value -> unit
 
     method refine_to_function : int -> env -> value -> value * (value -> value)
     method refine_to_pair     : int -> env -> value -> value * (value -> value)
