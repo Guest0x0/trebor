@@ -7,8 +7,12 @@ open Eval
 
 let rec value_to_core g level typ value =
     match force g typ, force g value with
+    | _, Stuck(_, head, elim) ->
+        neutral_to_core g level head elim
+
     | Type _, _ ->
         snd (typ_to_core g level value)
+
     | TyFun(name, _, a, b), vf ->
         let var = stuck_local level a in
         Core.Fun(name, value_to_core g (level + 1) (b var) (apply vf var))
@@ -17,9 +21,6 @@ let rec value_to_core g level typ value =
         let fst = project vp `Fst in
         let snd = project vp `Snd in
         Core.Pair(value_to_core g level a fst, value_to_core g level (b fst) snd)
-
-    | (TyEq _ | Stuck _), Stuck(_, head, elim) ->
-        neutral_to_core g level head elim
 
     | _ ->
         raise RuntimeError
