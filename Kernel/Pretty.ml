@@ -215,7 +215,7 @@ let pp_error verbose fmt err =
             let names = List.init level (fun idx -> "$" ^ string_of_int (level - idx - 1)) in
             fprintf fmt "@[<hov2>%a@ = %a@]"
                 (pp_core ~verbose names) lhs
-                (pp_core ~verbose names) lhs
+                (pp_core ~verbose names) rhs
         in
         fprintf fmt "@[<v>@[<v2>unsolved meta:@ %a@]@ "
             (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt "@ ") pp_entry) metas;
