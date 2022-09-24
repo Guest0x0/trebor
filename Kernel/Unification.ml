@@ -213,7 +213,6 @@ class context = object(self)
     inherit Context.context
 
     val mutable equations = []
-    val mutable progressed = false
 
 
     method subtyp level v1 v2 =
@@ -226,29 +225,38 @@ class context = object(self)
 
 
     method solve_all =
-        let rec make_progress not_yet eqs =
-            match eqs with
+        let rec make_progress not_yet =
+            match equations with
             | [] ->
+                equations <- not_yet;
                 raise CannotSolveYet
             | eq :: eqs' ->
-                progressed <- false;
-                equations <- [];
-                try
-                    self#try_equation eq;
-                    equations <- List.rev_append not_yet eqs'
-                with CannotSolveYet ->
-                    if progressed
-                    then equations <- List.rev_append not_yet eqs'
-                    else make_progress (List.rev_append equations not_yet) eqs'
+                let count0 = self#solved_count in
+                equations <- eqs';
+                let (finished, delta) = self#try_equation eq in
+                if finished || self#solved_count > count0
+                then equations <- List.rev_append not_yet @@ List.rev_append delta eqs'
+                else make_progress (List.rev_append delta not_yet)
         in
         while equations <> [] do
-            make_progress [] equations
+            make_progress []
         done
 
     method private try_equation eq =
-        match eq.mode with
-        | `Value typ -> self#unify_value eq.level typ eq.lhs eq.rhs
-        | `Type      -> self#unify_typ_aux `Equal eq.level eq.lhs eq.rhs
+        let eqs0 = equations in
+        equations <- [];
+        try 
+            begin match eq.mode with
+            | `Value typ -> self#unify_value eq.level typ eq.lhs eq.rhs
+            | `Type      -> self#unify_typ_aux `Equal eq.level eq.lhs eq.rhs
+            end;
+            let delta = equations in
+            equations <- eqs0;
+            (true, delta)
+        with CannotSolveYet ->
+            let delta = equations in
+            equations <- eqs0;
+            (false, delta)
 
 
     method dump_equations = equations
@@ -290,7 +298,9 @@ class context = object(self)
 
 
     method private unify_value level typ v1 v2 =
-        match force self typ, force self v1, force self v2 with
+        let v1 = force self v1 in
+        let v2 = force self v2 in
+        match force self typ, v1, v2 with
         | Type _, typv1, typv2 ->
             self#unify_typ_aux `Equal level typv1 typv2
 
@@ -318,8 +328,7 @@ class context = object(self)
                 let ren = elim_to_renaming level elim in
                 let body = rename_value self meta ren typ v in
                 let sol = make_fun ren.cod body in
-                self#solve_meta meta (Eval.eval self 0 [] sol);
-                progressed <- true
+                self#solve_meta meta (Eval.eval self 0 [] sol)
             with CannotSolveYet ->
                 equations <- { level; mode = `Value typ; lhs = v1; rhs = v2 } :: equations;
                 raise CannotSolveYet
@@ -362,7 +371,9 @@ class context = object(self)
 
 
     method private unify_typ_aux (mode : [`Subtyp | `Equal]) level sub sup =
-        match force self sub, force self sup with
+        let sub = force self sub in
+        let sup = force self sup in
+        match sub, sup with
         | Type ulevel1, Type ulevel2 ->
             begin match mode with
             | `Subtyp when ulevel1 <= ulevel2 -> ()
@@ -370,7 +381,7 @@ class context = object(self)
             | _                               -> raise UnificationFailure
             end
 
-        | TyFun (name, kind1, a1, b1), TyFun (_, kind2, a2, b2) when kind1 = kind2 ->
+        | TyFun(name, kind1, a1, b1), TyFun(_, kind2, a2, b2) when kind1 = kind2 ->
             self#unify_typ_aux mode level a2 a1;
             let var = stuck_local level a2 in
             self#unify_typ_aux mode (level + 1) (b1 var) (b2 var)
@@ -397,8 +408,7 @@ class context = object(self)
                 let meta, elim = decompose_pair self meta elim in
                 let ren = elim_to_renaming level elim in
                 let sol = make_fun ren.cod (rename_typ  self meta ren v) in
-                self#solve_meta meta (Eval.eval self 0 [] sol);
-                progressed <- true
+                self#solve_meta meta (Eval.eval self 0 [] sol)
             with CannotSolveYet ->
                 equations <- { level; mode = `Type; lhs = sub; rhs = sup } :: equations;
                 raise CannotSolveYet

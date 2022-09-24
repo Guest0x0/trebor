@@ -12,7 +12,8 @@ let garbage = Value.Free(Value.Type 0)
 
 class context = object(self)
     val globals : (string, Value.top_level) Hashtbl.t = Hashtbl.create 42
-    val mutable meta_count = 0
+    val mutable meta_count   = 0
+    val mutable solved_count = 0
     val mutable metas = Array.make 10 garbage
 
 
@@ -38,8 +39,12 @@ class context = object(self)
 
     method solve_meta meta value =
         match self#find_meta meta with
-        | Value.Free typ -> metas.(meta) <- Solved(typ, value)
+        | Value.Free typ ->
+            solved_count <- solved_count + 1;
+            metas.(meta) <- Solved(typ, value)
         | Value.Solved _ -> failwith "Context.context#solve_meta"
+
+    method solved_count = solved_count
 
 
     method fresh_meta typ =
