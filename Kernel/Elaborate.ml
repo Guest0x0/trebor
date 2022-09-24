@@ -294,7 +294,7 @@ let rec check_env g env =
 
 let flush_meta span g =
     try g#solve_all; g#check_metas
-    with Unification.CannotSolveYet | Context.UnsolvedMeta _ ->
+    with Unification.CannotSolveYet | Context.UnsolvedMeta _ | Unification.UnificationFailure ->
         let metas = g#dump_metas |> List.map @@ fun (meta, info) ->
             (meta, Quote.meta_info_to_core g info)
         in

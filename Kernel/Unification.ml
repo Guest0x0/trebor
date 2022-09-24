@@ -139,13 +139,13 @@ let env_to_typ g level (env : Value.env) ret_typ =
         match kind with
         | `Bound   -> ( add_boundvar ren
                       , level + 1
-                      , (name, rename_typ g level ren typ) :: params )
+                      , (name, rename_typ g (-1) ren typ) :: params )
         | `Defined -> ( { ren with dom = ren.dom + 1 }
                       , level + 1
                       , params )
     in
     let ren, _, params = List.fold_right add_entry env (empty_renaming, 0, []) in
-    let ret_typC = rename_typ g level ren ret_typ in
+    let ret_typC = rename_typ g (-1) ren ret_typ in
     List.fold_left
         (fun body (name, param_typ) -> Core.TyFun(name, Explicit, param_typ, body))
         ret_typC params
