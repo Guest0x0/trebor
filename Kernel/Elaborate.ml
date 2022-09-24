@@ -152,7 +152,7 @@ let rec infer g ctx expr =
         | `Fst ->
             ( fst_typ, Core.Proj(pairC, field) )
         | `Snd ->
-            let fstV = Eval.project (Eval.eval g 0 ctx.venv pairC) `Fst in
+            let fstV = Eval.project g (Eval.eval g 0 ctx.venv pairC) `Fst in
             ( snd_typ fstV, Core.Proj(pairC, field) )
         end
 

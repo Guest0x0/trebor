@@ -5,14 +5,12 @@ open Value
 exception RuntimeError
 
 
-val apply   : value -> value -> value
-val project : value -> [`Fst | `Snd] -> value
+val apply     : #Context.context -> value -> value -> value
+val project   : #Context.context -> value -> [`Fst | `Snd] -> value
+val eliminate : #Context.context -> value -> elimination -> value
+val force     : #Context.context -> value -> value
 
 val coerce  : #Context.context -> int -> value -> value -> value -> value Lazy.t -> value
-
-val eliminate : value -> elimination -> value
-
-val force : #Context.context -> value -> value
 
 val eval : #Context.context -> int -> value list -> Core.expr -> value
 

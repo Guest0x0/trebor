@@ -6,36 +6,63 @@ open Value
 exception RuntimeError
 
 
-let apply vf va =
+let rec apply g vf va =
     match vf with
-    | Fun  (_, f)                    -> f va
-    | Stuck(TyFun(_, _, a, b), h, e) -> Stuck(b va, h, App(e, a, va))
-    | _                              -> raise RuntimeError
-
-
-let project vpair field =
-    match vpair, field with
-    | Pair(fst, _), `Fst -> fst
-    | Pair(_, snd), `Snd -> snd
-    | Stuck(TyPair(_, a, b), h, e), field ->
-        let fst = Stuck(a, h, Proj(e, `Fst)) in
-        begin match field with
-        | `Fst -> fst
-        | `Snd -> Stuck(b fst, h, Proj(e, `Snd))
+    | Fun  (_, f)      -> f va
+    | Stuck(typ, h, e) ->
+        begin match force g typ with
+        | TyFun(_, _, a, b) -> Stuck(b va, h, App(e, a, va))
+        | _                 -> raise RuntimeError
         end
     | _ ->
         raise RuntimeError
 
 
+and project g vpair field =
+    match vpair, field with
+    | Pair(fst, _), `Fst -> fst
+    | Pair(_, snd), `Snd -> snd
+    | Stuck(typ, h, e), field ->
+        begin match force g typ, field with
+        | TyPair(_, a, b), `Fst -> Stuck(a, h, Proj(e, `Fst))
+        | TyPair(_, a, b), `Snd -> Stuck(b @@ Stuck(a, h, Proj(e, `Fst)), h, Proj(e, `Snd))
+        | _                     -> raise RuntimeError
+        end
+    | _ ->
+        raise RuntimeError
 
-let app_axiom g axiom ?(shift=0) args =
+
+and eliminate g headv = function
+    | EmptyElim           -> headv
+    | App(elim', _, argv) -> apply g (eliminate g headv elim') argv
+    | Proj(elim', field)  -> project g (eliminate g headv elim') field
+
+
+and force g value =
+    match value with
+    | Stuck(_, Meta(_, m), elim) ->
+        begin match g#find_meta m with
+        | Solved(_, v) -> force g (eliminate g v elim)
+        | _            -> value
+        end
+    | Stuck(typ, Coe coe, elim) ->
+        begin match coerce g coe.ulevel coe.coerced coe.lhs coe.rhs coe.eq with
+        | Stuck(_, head, EmptyElim) -> Stuck(typ, head, elim)
+        | value                     -> force g (eliminate g value elim)
+        end
+    | _ ->
+        value
+
+
+
+and app_axiom g axiom ?(shift=0) args =
     match g#find_global axiom with
-    | AxiomDecl typ -> List.fold_left apply (Stuck(typ shift, TopVar(shift, axiom), EmptyElim)) args
+    | AxiomDecl typ -> List.fold_left (apply g) (Stuck(typ shift, TopVar(shift, axiom), EmptyElim)) args
     | Definition _  -> raise RuntimeError
 
 
 
-let rec coerce g ulevel coerced lhs rhs eq =
+and coerce g ulevel coerced lhs rhs eq =
     match lhs, rhs with
     | Type ulevel1, Type ulevel2 when ulevel1 = ulevel2 ->
         coerced
@@ -53,7 +80,7 @@ let rec coerce g ulevel coerced lhs rhs eq =
         in
         let f2 x2 =
             let x1 = coerce g ulevel x2 a2 a1 a2_eq_a1 in
-            let r1 = apply coerced x1 in
+            let r1 = apply g coerced x1 in
             let x2_eq_x1 () = app_axiom g "coe-coherent" [ a2; a1; x2; Lazy.force a2_eq_a1 ] in
             coerce g ulevel r1 (b1 x1) (b2 x2)
             @@ lazy(b1_eq_b2 x1 x2 @@ app_axiom g "eq-symm"
@@ -65,36 +92,20 @@ let rec coerce g ulevel coerced lhs rhs eq =
         let a1_eq_a2 = lazy(app_axiom g "pair-fst-injective"
                 [ a1; a2; Fun(name1, b1); Fun(name2, b2); Lazy.force eq ])
         in
-        let fst1 = project coerced `Fst in
+        let fst1 = project g coerced `Fst in
         let fst2 = coerce g ulevel fst1 a1 a2 a1_eq_a2 in
         let fst1_eq_fst2 () = app_axiom g "coe-coherent" [ a1; a2; fst1; Lazy.force a1_eq_a2 ] in
         let b1_eq_b2 = lazy(app_axiom g "pair-snd-injective"
                 [ a1; a2; Fun(name1, b1); Fun(name2, b2); Lazy.force eq
                 ; fst1; fst2; fst1_eq_fst2 () ])
         in
-        let snd1 = project coerced `Snd in
+        let snd1 = project g coerced `Snd in
         Pair(fst2, coerce g ulevel snd1 (b1 fst1) (b2 fst2) b1_eq_b2)
 
     (* TODO: handling of absurd equalities (e.g. (A -> B) = (A * B)) *)
     | _ ->
         Stuck(rhs, Coe { ulevel; coerced; lhs; rhs; eq }, EmptyElim)
 
-
-
-let rec eliminate headv = function
-    | EmptyElim           -> headv
-    | App(elim', _, argv) -> apply (eliminate headv elim') argv
-    | Proj(elim', field)  -> project (eliminate headv elim') field
-
-let rec force g value =
-    match value with
-    | Stuck(_, Meta(_, m), elim) ->
-        begin match g#find_meta m with
-        | Solved(_, v) -> force g (eliminate v elim)
-        | _            -> value
-        end
-    | _ ->
-        value
 
 
 
@@ -115,13 +126,13 @@ let rec eval g shift env core =
                                            , eval g shift env a
                                            , fun v -> eval g shift (v :: env) b)
     | Core.Fun(name, body) -> Fun(name, fun v -> eval g shift (v :: env) body)
-    | Core.App(func, arg)  -> apply (eval g shift env func) (eval g shift env arg)
+    | Core.App(func, arg)  -> apply g (eval g shift env func) (eval g shift env arg)
 
     | Core.TyPair(name, a, b) -> TyPair( name
                                        , eval g shift env a
                                        , fun v -> eval g shift (v :: env) b )
     | Core.Pair(fst, snd)     -> Pair(eval g shift env fst, eval g shift env snd)
-    | Core.Proj(pair, field)  -> project (eval g shift env pair) field
+    | Core.Proj(pair, field)  -> project g (eval g shift env pair) field
 
     | Core.TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
         TyEq( (eval g shift env lhs, eval g shift env lhs_typ)

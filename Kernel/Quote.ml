@@ -15,11 +15,11 @@ let rec value_to_core g level typ value =
 
     | TyFun(name, _, a, b), vf ->
         let var = stuck_local level a in
-        Core.Fun(name, value_to_core g (level + 1) (b var) (apply vf var))
+        Core.Fun(name, value_to_core g (level + 1) (b var) (apply g vf var))
 
     | TyPair(_, a, b), vp ->
-        let fst = project vp `Fst in
-        let snd = project vp `Snd in
+        let fst = project g vp `Fst in
+        let snd = project g vp `Snd in
         Core.Pair(value_to_core g level a fst, value_to_core g level (b fst) snd)
 
     | _ ->

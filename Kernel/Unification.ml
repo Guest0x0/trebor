@@ -53,11 +53,11 @@ let rec rename_value g m ren typ value =
 
     | TyFun(name, _, a, b), _ ->
         let var = stuck_local ren.dom a in
-        Core.Fun(name, rename_value g m (add_boundvar ren) (b var) (apply value var))
+        Core.Fun(name, rename_value g m (add_boundvar ren) (b var) (apply g value var))
 
     | TyPair(_, a, b), _ ->
-        let fst = project value `Fst in
-        let snd = project value `Snd in
+        let fst = project g value `Fst in
+        let snd = project g value `Snd in
         Core.Pair(rename_value g m ren a fst, rename_value g m ren (b fst) snd)
 
     | (TyEq _ | Stuck _), Stuck(_, head, elim) ->
@@ -306,13 +306,13 @@ class context = object(self)
 
         | TyFun(name, _, a, b), f1, f2 ->
             let var = stuck_local level a in
-            self#unify_value (level + 1) (b var) (apply f1 var) (apply f2 var)
+            self#unify_value (level + 1) (b var) (apply self f1 var) (apply self f2 var)
 
         | TyPair(_, a, b), p1, p2 ->
-            let fst1 = project p1 `Fst in
-            let fst2 = project p2 `Fst in
+            let fst1 = project self p1 `Fst in
+            let fst2 = project self p2 `Fst in
             self#unify_value level a fst1 fst2;
-            self#unify_value level (b fst1) (project p1 `Snd) (project p2 `Snd)
+            self#unify_value level (b fst1) (project self p1 `Snd) (project self p2 `Snd)
 
         | TyEq _, _, _ ->
             ()
