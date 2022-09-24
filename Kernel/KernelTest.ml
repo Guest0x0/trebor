@@ -329,11 +329,9 @@ let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     forall (eq : (forall (a : A1) -> B1 a) = (forall (a : A2) -> B2 a)) ->
     forall (f : forall (a : A1) -> B1 a) ->
         f :> eq = (fun (a2 : A2) ->
-            let eqA = ~eq-symm (@fun-param-injective A1 A2 B1 B2 eq) in
+            let eqA = ~eq-symm (fun-param-injective eq) in
             let a1  = a2 :> eqA in 
-            let eqB = @fun-ret-injective A1 A2 B1 B2 eq a1 a2
-                (eq-symm (coe-coherent a2 eqA))
-            in
+            let eqB = fun-ret-injective eq (eq-symm (coe-coherent a2 eqA)) in
             f a1 :> eqB)
 let goal = fun A1 A2 B1 B2 eq f -> eq-refl (f :> eq)
 " ;;
@@ -343,10 +341,10 @@ let goal : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     forall (eq : (exists (a : A1) -> B1 a) = (exists (a : A2) -> B2 a)) ->
     forall (pair : exists (a : A1) -> B1 a) ->
         pair :> eq = (
-            let eqA = pair-fst-injective A1 A2 B1 B2 eq in
+            let eqA = pair-fst-injective eq in
             let a1 = pair.1 in
             let a2 = a1 :> eqA in
-            let eqB = pair-snd-injective A1 A2 B1 B2 eq a1 a2 (coe-coherent a1 eqA) in
+            let eqB = pair-snd-injective eq (coe-coherent a1 eqA) in
             (a2, pair.2 :> eqB) : (exists (a : A2) -> B2 a)
         )
 let goal = fun A1 A2 B1 B2 eq pair -> eq-refl (pair :> eq)
@@ -655,18 +653,13 @@ let test = fun A -> Cons @{id} Nil
 
 
 register_test "examples.type-formers-resp-eq" None "
-let ap : forall (A B : Type 0) (a1 a2 : A) (f : A -> B) -> a1 = a2 -> f a1 = f a2
-let ap = fun A B a1 a2 f eq ->
-    apply-resp-eq A A (fun a -> B) (fun a -> B) f f (eq-refl f) a1 a2 eq
-
-
 let fun-type-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     A1 = A2 -> B1 = B2 -> (forall (a1 : A1) -> B1 a1) = (forall (a2 : A2) -> B2 a2)
 let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
-    ~ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
-        (A1, B1) (A2, B2)
-        (fun family -> forall (a : family.1) -> family.2 a)
-        (~pairext
+    ~apply-resp-eq
+        (eq-refl (fun (family : exists (A : Type) -> A -> Type) ->
+                    forall (a : family.1) -> family.2 a))
+        (@ ~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)
@@ -676,10 +669,10 @@ let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
 let pair-type-resp-eq : forall (A1 A2 : Type 0) (B1 : A1 -> Type 0) (B2 : A2 -> Type 0) ->
     A1 = A2 -> B1 = B2 -> (exists (a1 : A1) -> B1 a1) = (exists (a2 : A2) -> B2 a2)
 let pair-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
-    ~ap (exists (A : Type 0) -> A -> Type 0) (Type 0)
-        (A1, B1) (A2, B2)
-        (fun family -> exists (a : family.1) -> family.2 a)
-        (~pairext
+    ~apply-resp-eq
+        (eq-refl (fun (family : exists (A : Type) -> A -> Type) ->
+                    exists (a : family.1) -> family.2 a))
+        (@ ~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)
