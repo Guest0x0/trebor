@@ -43,7 +43,7 @@ module Value = struct
 
     type top_level =
         | AxiomDecl  of (int -> value)
-        | Definition of (int -> value )* (int -> value)
+        | Definition of (int -> value ) * (int -> value)
 
 
     let stuck_local level typ = Stuck(typ, Local level, EmptyElim) [@@inline]

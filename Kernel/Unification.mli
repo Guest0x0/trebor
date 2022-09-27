@@ -3,32 +3,20 @@ open Syntax
 open Value
 
 
-exception CannotSolveYet
 exception UnificationFailure
 
 
-val close_value : #Context.context -> int -> value -> value -> value
-val env_to_typ  : #Context.context -> int -> Value.env -> value -> value
-val env_to_elim : int -> Value.env -> elimination
+type renaming
+
+val close_value  : #Context.context -> int -> value -> value -> value
+val env_to_elim  : int -> Value.env -> elimination
+val env_to_tyfun : #Context.context -> Value.env -> value -> value
 
 
 
-type equation =
-    { level : int
-    ; mode  : [`Value of value | `Type]
-    ; lhs   : value
-    ; rhs   : value }
+val subtyp      : #Context.context -> int -> value -> value -> unit
+val unify_typ   : #Context.context -> int -> value -> value -> unit 
+val unify_value : #Context.context -> int -> value -> value -> value -> unit
 
-class context : object
-    inherit Context.context
-
-    method solve_all : unit
-    method dump_equations : equation list
-
-    method subtyp      : int -> value -> value -> unit
-    method unify_typ   : int -> value -> value -> unit 
-    method unify_value : int -> value -> value -> value -> unit
-
-    method refine_to_function : int -> env -> value -> value * (value -> value)
-    method refine_to_pair     : int -> env -> value -> value * (value -> value)
-end
+val refine_to_function : #Context.context -> int -> env -> value -> value * (value -> value)
+val refine_to_pair     : #Context.context -> int -> env -> value -> value * (value -> value)

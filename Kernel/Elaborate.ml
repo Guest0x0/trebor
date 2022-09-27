@@ -120,7 +120,7 @@ let rec infer g ctx expr =
         let func_typ0, funcC = infer g ctx func in
         let func_typ, funcC = Implicit.elim_implicit g ctx.level ctx.tenv funcC func_typ0 in
         let (a, b) =
-            try g#refine_to_function ctx.level ctx.tenv func_typ with
+            try Unification.refine_to_function g ctx.level ctx.tenv func_typ with
               Unification.UnificationFailure ->
                 wrong_type g ctx expr.span func_typ0 "function"
         in
@@ -144,7 +144,7 @@ let rec infer g ctx expr =
         let pair_typ0, pairC = infer g ctx pair in
         let pair_typ, pairC = Implicit.elim_implicit g ctx.level ctx.tenv pairC pair_typ0 in
         let (fst_typ, snd_typ) =
-            try g#refine_to_pair ctx.level ctx.tenv pair_typ with
+            try Unification.refine_to_pair g ctx.level ctx.tenv pair_typ with
               Unification.UnificationFailure ->
                 wrong_type g ctx expr.span pair_typ0 "pair"
         in
@@ -188,10 +188,10 @@ let rec infer g ctx expr =
         end
 
     | Surface.Hole ->
-        let typ_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv (Value.Type 0)) in
+        let typ_meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv (Value.Type 0)) in
         let elim = Unification.env_to_elim ctx.level ctx.tenv in
         let typ = Value.Stuck(Type 0, Value.Meta("", typ_meta), elim) in
-        let hole_meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
+        let hole_meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv typ) in
         (typ, Quote.neutral_to_core g ctx.level (Value.Meta("", hole_meta)) elim)
 
     | Surface.Explicitfy expr' ->
@@ -242,7 +242,7 @@ and check err_ctx g ctx typ expr =
         Core.Pair(fstC, sndC)
 
     | typ, Surface.Hole ->
-        let meta = g#fresh_meta (Unification.env_to_typ g ctx.level ctx.tenv typ) in
+        let meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv typ) in
         Quote.neutral_to_core g ctx.level (Value.Meta("", meta))
             (Unification.env_to_elim ctx.level ctx.tenv)
 
@@ -253,7 +253,7 @@ and check err_ctx g ctx typ expr =
             | Stuck(_, Meta _, _) -> actual_typ, exprC
             | _                   -> Implicit.elim_implicit g ctx.level ctx.tenv exprC actual_typ
         in
-        begin match g#subtyp ctx.level actual_typ typ with
+        begin match Unification.subtyp g ctx.level actual_typ typ with
         | () ->
             exprC
         | exception Unification.UnificationFailure ->
@@ -271,7 +271,7 @@ and check_typ g ctx expr =
 and check_annotation err_ctx g ctx typV ann =
     let _, annC = check_typ g ctx ann in
     let annV = Eval.eval g 0 ctx.venv annC in
-    begin match g#subtyp ctx.level typV annV with
+    begin match Unification.subtyp g ctx.level typV annV with
     | () ->
         annV
     | exception Unification.UnificationFailure ->
@@ -293,21 +293,12 @@ let rec check_env g env =
 
 
 let flush_meta span g =
-    try g#solve_all; g#check_metas
-    with Unification.CannotSolveYet | Context.UnsolvedMeta _ | Unification.UnificationFailure ->
+    try g#check_metas with
+      Context.UnsolvedMeta _ ->
         let metas = g#dump_metas |> List.map @@ fun (meta, info) ->
             (meta, Quote.meta_info_to_core g info)
         in
-        let eqs = g#dump_equations |> List.map @@ fun eq ->
-            match eq.Unification.mode with
-            | `Value typ -> ( eq.level
-                            , Quote.value_to_core g eq.level typ eq.lhs
-                            , Quote.value_to_core g eq.level typ eq.rhs )
-            | `Type      -> ( eq.level
-                            , snd @@ Quote.typ_to_core g eq.level eq.lhs
-                            , snd @@ Quote.typ_to_core g eq.level eq.rhs )
-        in
-        raise @@ Error.Error(span, Error.UnsolvedMeta(metas, eqs))
+        raise @@ Error.Error(span, Error.UnsolvedMeta(metas, []))
 
 
 let check_top_level g (span, top) =

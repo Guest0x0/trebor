@@ -103,13 +103,13 @@ let error_equal globals err1 err2 =
 
 
 let wrong_type ctx typ err_ctx =
-    let g = new Unification.context in
+    let g = new Context.context in
     let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
     let elab_ctx, envC = Elaborate.check_env g env in
     Syntax.Error.WrongType(envC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
-    let g = new Unification.context in
+    let g = new Context.context in
     let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
     let elab_ctx, envC = Elaborate.check_env g env in
     Syntax.Error.TypeMismatch( envC
@@ -127,7 +127,7 @@ let register_test name expectation src =
 
 let run_test (name, expectation, src) =
     let open Format in
-    let g = new Unification.context in
+    let g = new Context.context in
     let result =
         try
             Prelude.load g;
@@ -659,7 +659,7 @@ let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
     ~apply-resp-eq
         (eq-refl (fun (family : exists (A : Type) -> A -> Type) ->
                     forall (a : family.1) -> family.2 a))
-        (@ ~pairext
+        (~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)

@@ -1,7 +1,7 @@
 
 open Kernel
 
-let g = new Unification.context
+let g = new Context.context
 
 let _ =
     let file = Sys.argv.(1) in
