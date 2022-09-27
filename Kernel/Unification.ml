@@ -137,7 +137,7 @@ and rename_neutral g m ren head = function
         begin match head with
         | Local lvl ->
             begin match List.assoc lvl ren.map with
-            | typ, value           -> Quote.value_to_core g ren.cod_level typ value
+            | typ, value          -> Quote.value_to_core g ren.cod_level typ value
             | exception Not_found -> raise UnificationFailure
             end
         | Coe coe ->
@@ -210,11 +210,15 @@ let decompose_pair g meta elim =
             | Free typ -> typ, 0, [], meta, elim
             | _        -> raise RuntimeError
             end
-        | App(elim', arg_typ, arg) ->
+        | App(elim', _, arg) ->
             let typ, level, env, meta', elim' = loop elim' in
-            begin match typ with
-            | TyFun(_, _, a, b) ->
-                b arg, level + 1, ("", a, `Bound) :: env, meta', App(elim', a, arg)
+            begin match Eval.force g typ with
+            | TyFun(name, _, a, b) ->
+                ( b (stuck_local level a)
+                , level + 1
+                , (name, a, `Bound) :: env
+                , meta'
+                , App(elim', a, arg) )
             | _  ->
                 raise RuntimeError
             end
