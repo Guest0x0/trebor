@@ -244,9 +244,7 @@ let decompose_pair g meta elim =
 
 
 let rec unify_value g level typ v1 v2 =
-    let v1 = force g v1 in
-    let v2 = force g v2 in
-    match force g typ, v1, v2 with
+    match force g typ, force g v1, force g v2 with
     | Type _, typv1, typv2 ->
         unify_typ_aux `Equal g level typv1 typv2
 
@@ -260,15 +258,15 @@ let rec unify_value g level typ v1 v2 =
         unify_value g level a fst1 fst2;
         unify_value g level (b fst1) (project g p1 `Snd) (project g p2 `Snd)
 
-    | TyEq _, _, _ ->
-        ()
-
     | typ, Stuck(_, Meta(_, meta), elim), v
     | typ, v, Stuck(_, Meta(_, meta), elim) ->
         let meta, elim = decompose_pair g meta elim in
         let ren = elim_to_renaming g level elim in
         let body = rename_value g meta ren typ v in
         g#solve_meta meta (Eval.eval g 0 [] @@ make_fun ren.cod_level body)
+
+    | TyEq _, _, _ ->
+        ()
 
     | Stuck _, Stuck(_, head1, elim1), Stuck(_, head2, elim2) ->
         unify_head g level head1 head2;
@@ -307,9 +305,7 @@ and unify_elim g level elim1 elim2 =
 
 
 and unify_typ_aux (mode : [`Subtyp | `Equal]) g level sub sup =
-    let sub = force g sub in
-    let sup = force g sup in
-    match sub, sup with
+    match force g sub, force g sup with
     | Type ulevel1, Type ulevel2 ->
         begin match mode with
         | `Subtyp when ulevel1 <= ulevel2 -> ()
