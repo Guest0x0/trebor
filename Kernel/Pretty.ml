@@ -18,13 +18,15 @@ type pp_context =
     ; prec    : int 
     ; verbose : bool }
 
+
 let add_var name ctx =
-    let name =
-        if name = "" || List.mem name ctx.names
-        then "$" ^ string_of_int ctx.level
-        else name
-    in
+    let name = if List.mem name ctx.names then "" else name in
     ( name, { ctx with names = name :: ctx.names; level = ctx.level + 1 })
+
+let pp_name fmt (name, lvl) =
+    if name = ""
+    then fprintf fmt "$%d" lvl
+    else fprintf fmt "%s" name
 
 
 let incr_prec  ctx = { ctx with prec  = ctx.prec  + 1 }
@@ -36,7 +38,7 @@ let rec pp_core ctx fmt core =
         fprintf fmt "%s" name
 
     | Core.Local idx ->
-        fprintf fmt "%s" (List.nth ctx.names idx)
+        pp_name fmt (List.nth ctx.names idx, ctx.level - idx - 1)
 
     | Core.Let(name, rhs, body) when ctx.prec <= prec_binder ->
         let name, ctx' = add_var name ctx in
@@ -111,8 +113,14 @@ let rec pp_core ctx fmt core =
 and pp_core_tyfun ctx fmt (name, kind, a, b) =
     let name, ctx' = add_var name ctx in
     begin match kind with
-    | Explicit -> fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
-    | Implicit -> fprintf fmt "{%s : %a}" name (pp_core @@ incr_prec ctx) a;
+    | Explicit ->
+        fprintf fmt "(%a : %a)"
+            pp_name (name, ctx.level)
+            (pp_core @@ incr_prec ctx) a;
+    | Implicit ->
+        fprintf fmt "{%a : %a}"
+            pp_name (name, ctx.level)
+            (pp_core @@ incr_prec ctx) a;
     end;
     match b with
     | Core.TyFun(name', kind', a', b') -> fprintf fmt "@ %a" (pp_core_tyfun ctx') (name', kind', a', b')
@@ -120,14 +128,14 @@ and pp_core_tyfun ctx fmt (name, kind, a, b) =
 
 and pp_core_typair ctx fmt (name, a, b) =
     let name, ctx' = add_var name ctx in
-    fprintf fmt "(%s : %a)" name (pp_core @@ incr_prec ctx) a;
+    fprintf fmt "(%a : %a)" pp_name (name, ctx.level) (pp_core @@ incr_prec ctx) a;
     match b with
     | Core.TyPair(name', a', b') -> fprintf fmt "@ %a" (pp_core_typair ctx') (name', a', b')
     | _                          -> fprintf fmt " ->@ %a" (pp_core ctx') b
 
 and pp_core_fun ctx fmt (name, body) =
     let name, ctx' = add_var name ctx in
-    fprintf fmt "%s" name;
+    fprintf fmt "%a" pp_name (name, ctx.level);
     match body with
     | Core.Fun(name', body') -> fprintf fmt "@ %a" (pp_core_fun ctx') (name', body')
     | _                      -> fprintf fmt " ->@ %a" (pp_core ctx') body
@@ -166,13 +174,16 @@ let pp_core_top_level verbose fmt top =
 let pp_env verbose fmt ctx =
     let rec loop = function
         | [] ->
-            []
+            0, []
         | (name, typ, _) :: ctx' ->
-            let names = loop ctx' in
-            if names <> [] then
+            let level, names = loop ctx' in
+            if level <> 0 then
                 fprintf fmt "@ ";
-            fprintf fmt "%s : %a" name (pp_core ~verbose names) typ;
-            name :: names
+            begin match name with
+            | "" -> fprintf fmt "$%d : %a" level (pp_core ~verbose names) typ
+            | _  -> fprintf fmt "%s : %a" name (pp_core ~verbose names) typ
+            end;
+            (level + 1, name :: names)
     in
     ignore (loop ctx)
 
