@@ -659,7 +659,7 @@ let fun-type-resp-eq = fun A1 A2 B1 B2 eqA eqB ->
     ~apply-resp-eq
         (eq-refl (fun (family : exists (A : Type) -> A -> Type) ->
                     forall (a : family.1) -> family.2 a))
-        (~pairext
+        (@ ~pairext
             (Type 0) (Type 0)
             (fun A -> A -> Type 0) (fun A -> A -> Type 0)
             (A1, B1) (A2, B2)
