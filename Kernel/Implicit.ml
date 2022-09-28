@@ -3,15 +3,23 @@ open Syntax
 open Value
 
 
-let rec elim_implicit g level env core typ =
+let rec gen_implicit_args g level env typ =
     match Eval.force g typ with
     | TyFun(_, Implicit, a, b) ->
         let meta = g#fresh_meta (Unification.env_to_tyfun g env a) in
         let arg = Stuck(a, Meta("", meta), Unification.env_to_elim level env) in
-        elim_implicit g level env
-            (Core.App(core, Quote.value_to_core g level a arg)) (b arg)
+        let typ', args = gen_implicit_args g level env (b arg) in
+        typ', (a, arg) :: args
     | typ ->
-        (typ, core)
+        (typ, [])
+
+
+let fill_implicit_args g level env funcC typ =
+    let typ', args = gen_implicit_args g level env typ in
+    ( typ'
+    , List.fold_left
+            (fun func (typ, arg) -> Core.App(func, Quote.value_to_core g level typ arg))
+            funcC args )
 
 
 let rec explicitfy g value =

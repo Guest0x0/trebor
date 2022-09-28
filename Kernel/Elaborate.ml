@@ -117,12 +117,12 @@ let rec infer g ctx expr =
         , Core.Fun(name, bodyC) )
 
     | Surface.App(func, arg) ->
-        let func_typ0, funcC = infer g ctx func in
-        let func_typ, funcC = Implicit.elim_implicit g ctx.level ctx.tenv funcC func_typ0 in
+        let func_typ, funcC = infer g ctx func in
+        let func_typ, funcC = Implicit.fill_implicit_args g ctx.level ctx.tenv funcC func_typ in
         let (a, b) =
             try Unification.refine_to_function g ctx.level ctx.tenv func_typ with
               Unification.UnificationFailure ->
-                wrong_type g ctx expr.span func_typ0 "function"
+                wrong_type g ctx expr.span func_typ "function"
         in
         let argC = check "function application" g ctx a arg in
         ( b (Eval.eval g 0 ctx.venv argC), Core.App(funcC, argC) )
@@ -141,12 +141,12 @@ let rec infer g ctx expr =
         , Core.Pair(fstC, sndC) )
 
     | Surface.Proj(pair, field) ->
-        let pair_typ0, pairC = infer g ctx pair in
-        let pair_typ, pairC = Implicit.elim_implicit g ctx.level ctx.tenv pairC pair_typ0 in
+        let pair_typ, pairC = infer g ctx pair in
+        let pair_typ, pairC = Implicit.fill_implicit_args g ctx.level ctx.tenv pairC pair_typ in
         let (fst_typ, snd_typ) =
             try Unification.refine_to_pair g ctx.level ctx.tenv pair_typ with
               Unification.UnificationFailure ->
-                wrong_type g ctx expr.span pair_typ0 "pair"
+                wrong_type g ctx expr.span pair_typ "pair"
         in
         begin match field with
         | `Fst ->
@@ -165,8 +165,8 @@ let rec infer g ctx expr =
         , Core.TyEq((lhsC, lhs_typC), (rhsC, rhs_typC)) )
 
     | Surface.Coe(coerced, eq) ->
-        let eq_typ0, eqC = infer g ctx eq in
-        let eq_typ , eqC = Implicit.elim_implicit g ctx.level ctx.tenv eqC eq_typ0 in
+        let eq_typ, eqC = infer g ctx eq in
+        let eq_typ, eqC = Implicit.fill_implicit_args g ctx.level ctx.tenv eqC eq_typ in
         begin match eq_typ with
         | TyEq((lhs, lhs_typ), (rhs, rhs_typ)) ->
             begin match Eval.force g lhs_typ, Eval.force g rhs_typ with
@@ -181,10 +181,10 @@ let rec infer g ctx expr =
                            ; rhs     = rhsC
                            ; eq      = Lazy.from_val eqC } )
             | _ ->
-                wrong_type g ctx expr.span eq_typ0 "equality between types"
+                wrong_type g ctx expr.span eq_typ "equality between types"
             end
         | _ ->
-            wrong_type g ctx expr.span eq_typ0 "equality"
+            wrong_type g ctx expr.span eq_typ "equality"
         end
 
     | Surface.Hole ->
@@ -200,7 +200,7 @@ let rec infer g ctx expr =
 
     | Surface.ElimImplicit expr' ->
         let typ, exprC = infer g ctx expr' in
-        Implicit.elim_implicit g ctx.level ctx.tenv exprC typ
+        Implicit.fill_implicit_args g ctx.level ctx.tenv exprC typ
 
 
 and check err_ctx g ctx typ expr =
@@ -251,7 +251,7 @@ and check err_ctx g ctx typ expr =
         let actual_typ, exprC =
             match typ with
             | Stuck(_, Meta _, _) -> actual_typ, exprC
-            | _                   -> Implicit.elim_implicit g ctx.level ctx.tenv exprC actual_typ
+            | _                   -> Implicit.fill_implicit_args g ctx.level ctx.tenv exprC actual_typ
         in
         begin match Unification.subtyp g ctx.level actual_typ typ with
         | () ->
@@ -277,6 +277,7 @@ and check_annotation err_ctx g ctx typV ann =
     | exception Unification.UnificationFailure ->
         type_mismatch g ctx ann.span typV annV err_ctx
     end
+
 
 
 
