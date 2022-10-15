@@ -1,7 +1,7 @@
-with import <nixpkgs>; {}
+with import <nixpkgs> {};
 
 mkShell {
     buildInputs = (with ocamlPackages; [
-        ocaml dune_d findlib
+        ocaml dune_2 findlib
     ]);
 }
