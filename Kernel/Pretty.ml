@@ -79,7 +79,7 @@ let rec pp_core ctx fmt core =
     | Core.Proj(pair, field) ->
         fprintf fmt "%a.%d"
             (pp_core { ctx with prec = prec_proj }) pair
-            (match field with `Fst -> 1 | `Snd -> 2)
+            (match field with Fst -> 1 | Snd -> 2)
 
     | Core.TyEq((lhs, lhs_typ), (rhs, rhs_typ)) when ctx.prec <= prec_eq ->
         begin match ctx.verbose with
@@ -101,10 +101,8 @@ let rec pp_core ctx fmt core =
         then fprintf fmt "%a@]" (pp_core { ctx with prec = prec_coe + 1 }) (Lazy.force eq)
         else fprintf fmt "_@]"
 
-    | Core.Meta(name, meta) ->
-        if name = ""
-        then fprintf fmt "?%d" meta
-        else fprintf fmt "?%s" name
+    | Core.Meta meta ->
+        fprintf fmt "?%d" meta
 
     | _ ->
         fprintf fmt "(%a)" (pp_core { ctx with prec = 0 }) core
@@ -175,7 +173,7 @@ let pp_env verbose fmt ctx =
     let rec loop = function
         | [] ->
             0, []
-        | (name, typ, _) :: ctx' ->
+        | (_, name, typ) :: ctx' ->
             let level, names = loop ctx' in
             if level <> 0 then
                 fprintf fmt "@ ";
@@ -203,10 +201,10 @@ let pp_error verbose fmt err =
     | Error.CannotInfer msg -> fprintf fmt "cannot infer type of %s" msg
     | Error.WrongType(env, typ, expected) ->
         fprintf fmt "@[<v>expected: %s@ found: %a@ "
-            expected (pp_core ~verbose @@ List.map (fun (name, _, _) -> name) env) typ;
+            expected (pp_core ~verbose @@ List.map (fun (_, name, _) -> name) env) typ;
         fprintf fmt "@[<v2>in context:@ %a@]@]" (pp_env verbose) env
     | Error.TypeMismatch(env, expected, actual, err_ctx) ->
-        let names = List.map (fun (name, _, _) -> name) env in
+        let names = List.map (fun (_, name, _) -> name) env in
         fprintf fmt "@[<v>type mismatch at %s:@ " err_ctx;
         fprintf fmt "expected: %a@ " (pp_core ~verbose names) expected;
         fprintf fmt "received: %a@ " (pp_core ~verbose names) actual;

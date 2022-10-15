@@ -1,11 +1,16 @@
 
 type meta = int
 
+type binding_kind  = Bound | Defined
+
 type function_kind = Explicit | Implicit
+
+type field = Fst | Snd
+
 
 module Value = struct
     type value =
-        | Stuck  of value * head * elimination
+        | Stuck  of head * elimination
         | Type   of int
         | TyFun  of string * function_kind * value * (value -> value)
         | Fun    of string * (value -> value)
@@ -22,31 +27,28 @@ module Value = struct
               ; lhs     : value
               ; rhs     : value
               ; eq      : value Lazy.t }
-        | Meta of string * meta
+        | Meta of meta
 
     and elimination =
         | EmptyElim
-        | App   of elimination * value * value
-        | Proj  of elimination * [`Fst | `Snd]
+        | App   of elimination * value
+        | Proj  of elimination * field
 
 
-    type neutral = head * elimination
+    type typ = value
 
+    type env = (binding_kind * string * typ) list
 
     type meta_info =
-        | Free   of value
-        | Solved of value * value
-
-
-    type env = (string * value * [`Bound | `Defined]) list
-
+        | Free   of typ
+        | Solved of typ * value
 
     type top_level =
         | AxiomDecl  of (int -> value)
-        | Definition of (int -> value ) * (int -> value)
+        | Definition of (int -> typ) * (int -> value)
 
 
-    let stuck_local level typ = Stuck(typ, Local level, EmptyElim) [@@inline]
+    let stuck_local level = Stuck(Local level, EmptyElim) [@@inline]
 end
 
 
@@ -65,7 +67,7 @@ module Core = struct
 
         | TyPair of string * expr * expr
         | Pair   of expr * expr
-        | Proj   of expr * [`Fst | `Snd]
+        | Proj   of expr * field
 
         | TyEq of (expr * expr) * (expr * expr)
         | Coe  of
@@ -75,7 +77,7 @@ module Core = struct
               ; rhs     : expr
               ; eq      : expr Lazy.t }
 
-        | Meta   of string * meta
+        | Meta   of meta
 
 
     type meta_info =
@@ -83,7 +85,7 @@ module Core = struct
         | Solved of expr * expr
 
 
-    type env = (string * expr * [`Bound | `Defined]) list
+    type env = (binding_kind * string * expr) list
 
 
     type top_level =
@@ -115,7 +117,7 @@ module Surface = struct
 
         | TyPair of string * expr * expr
         | Pair   of expr * expr
-        | Proj   of expr * [`Fst | `Snd]
+        | Proj   of expr * field
 
         | TyEq   of expr * expr
         | Coe    of expr * expr
@@ -125,7 +127,7 @@ module Surface = struct
         | ElimImplicit of expr
 
 
-    type env = (string * expr * [`Bound | `Defined]) list
+    type env = (binding_kind * string * expr) list
 
 
     type top_level =

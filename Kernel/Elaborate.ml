@@ -19,20 +19,20 @@ let empty_ctx =
 let add_local name typ ?value ctx =
     let value, kind =
         match value with
-        | Some value -> value, `Defined
-        | None       -> Value.stuck_local ctx.level typ, `Bound
+        | Some value -> value, Defined
+        | None       -> Value.stuck_local ctx.level, Bound
     in
     { level = ctx.level + 1
     ; shift = ctx.shift
     ; venv  = value :: ctx.venv
-    ; tenv  = (name, typ, kind) :: ctx.tenv }
+    ; tenv  = (kind, name, typ) :: ctx.tenv }
 
 
 let find_local name ctx =
     let rec loop idx = function
         | [] ->
             raise Not_found
-        | (name', typ, _) :: _ when name = name' ->
+        | (_, name', typ) :: _ when name = name' ->
             idx, typ
         | _ :: rest ->
             loop (idx + 1) rest
@@ -43,13 +43,13 @@ let find_local name ctx =
 
 let wrong_type g ctx span typ expected =
     let ctxC = Quote.env_to_core g ctx.tenv in
-    let _, typC = Quote.typ_to_core g ctx.level typ in
+    let typC = Quote.value_to_core g ctx.level typ in
     raise @@ Error.Error(span, WrongType(ctxC, typC, expected))
 
 let type_mismatch g ctx span expected actual err_ctx =
     let ctxC = Quote.env_to_core g ctx.tenv in
-    let _, expectedC = Quote.typ_to_core g ctx.level expected in
-    let _, actualC   = Quote.typ_to_core g ctx.level actual in
+    let expectedC = Quote.value_to_core g ctx.level expected in
+    let actualC   = Quote.value_to_core g ctx.level actual in
     raise @@ Error.Error(span, TypeMismatch(ctxC, expectedC, actualC, err_ctx))
 
 
@@ -112,7 +112,7 @@ let rec infer g ctx expr =
         let _, param_typC = check_typ g ctx param_typ in
         let param_typV = Eval.eval g 0 ctx.venv param_typC in
         let ret_typV, bodyC = infer g (add_local name param_typV ctx) body in
-        let _, ret_typC = Quote.typ_to_core g (ctx.level + 1) ret_typV in
+        let ret_typC = Quote.value_to_core g (ctx.level + 1) ret_typV in
         ( Value.TyFun(name, kind, param_typV, fun v -> Eval.eval g 0 (v :: ctx.venv) ret_typC)
         , Core.Fun(name, bodyC) )
 
@@ -149,18 +149,18 @@ let rec infer g ctx expr =
                 wrong_type g ctx expr.span pair_typ "pair"
         in
         begin match field with
-        | `Fst ->
+        | Fst ->
             ( fst_typ, Core.Proj(pairC, field) )
-        | `Snd ->
-            let fstV = Eval.project g (Eval.eval g 0 ctx.venv pairC) `Fst in
+        | Snd ->
+            let fstV = Eval.project (Eval.eval g 0 ctx.venv pairC) Fst in
             ( snd_typ fstV, Core.Proj(pairC, field) )
         end
 
     | Surface.TyEq(lhs, rhs) ->
         let lhs_typ, lhsC = infer g ctx lhs in
         let rhs_typ, rhsC = infer g ctx rhs in
-        let ul_lhs, lhs_typC = Quote.typ_to_core g ctx.level lhs_typ in
-        let ul_rhs, rhs_typC = Quote.typ_to_core g ctx.level rhs_typ in
+        let ul_lhs, lhs_typC = Quote.infer_ulevel g ctx.level ctx.tenv lhs_typ in
+        let ul_rhs, rhs_typC = Quote.infer_ulevel g ctx.level ctx.tenv rhs_typ in
         ( Type(max ul_lhs ul_rhs)
         , Core.TyEq((lhsC, lhs_typC), (rhsC, rhs_typC)) )
 
@@ -172,8 +172,8 @@ let rec infer g ctx expr =
             begin match Eval.force g lhs_typ, Eval.force g rhs_typ with
             | Type ul_lhs, Type ul_rhs ->
                 let coercedC = check "coerced value" g ctx lhs coerced in
-                let _, lhsC = Quote.typ_to_core g ctx.level lhs in
-                let _, rhsC = Quote.typ_to_core g ctx.level rhs in
+                let lhsC = Quote.value_to_core g ctx.level lhs in
+                let rhsC = Quote.value_to_core g ctx.level rhs in
                 ( rhs
                 , Core.Coe { ulevel  = max ul_lhs ul_rhs
                            ; coerced = coercedC
@@ -190,9 +190,9 @@ let rec infer g ctx expr =
     | Surface.Hole ->
         let typ_meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv (Value.Type 0)) in
         let elim = Unification.env_to_elim ctx.level ctx.tenv in
-        let typ = Value.Stuck(Type 0, Value.Meta("", typ_meta), elim) in
+        let typ = Value.Stuck(Value.Meta typ_meta, elim) in
         let hole_meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv typ) in
-        (typ, Quote.neutral_to_core g ctx.level (Value.Meta("", hole_meta)) elim)
+        (typ, Quote.elim_to_core g ctx.level (Core.Meta hole_meta) elim)
 
     | Surface.Explicitfy expr' ->
         let typ, exprC = infer g ctx expr' in
@@ -226,12 +226,12 @@ and check err_ctx g ctx typ expr =
             | Some ann -> check_annotation "function annotation" g ctx param_typ ann
             | None     -> param_typ
         in
-        let ret_typ = ret_typ @@ Value.stuck_local ctx.level param_typ in
+        let ret_typ = ret_typ @@ Value.stuck_local ctx.level in
         let bodyC = check err_ctx g (add_local name param_typ ctx) ret_typ body in
         Core.Fun(name, bodyC)
 
     | TyFun(name, Implicit, param_typ, ret_typ), _ ->
-        let var = Value.stuck_local ctx.level param_typ in
+        let var = Value.stuck_local ctx.level in
         let exprC = check err_ctx g (add_local name param_typ ctx) (ret_typ var) expr in
         Core.Fun(name, exprC)
 
@@ -243,17 +243,17 @@ and check err_ctx g ctx typ expr =
 
     | typ, Surface.Hole ->
         let meta = g#fresh_meta (Unification.env_to_tyfun g ctx.tenv typ) in
-        Quote.neutral_to_core g ctx.level (Value.Meta("", meta))
+        Quote.elim_to_core g ctx.level (Core.Meta meta)
             (Unification.env_to_elim ctx.level ctx.tenv)
 
     | _ ->
         let actual_typ, exprC = infer g ctx expr in
         let actual_typ, exprC =
             match typ with
-            | Stuck(_, Meta _, _) -> actual_typ, exprC
-            | _                   -> Implicit.fill_implicit_args g ctx.level ctx.tenv exprC actual_typ
+            | Stuck(Meta _, _) -> actual_typ, exprC
+            | _                -> Implicit.fill_implicit_args g ctx.level ctx.tenv exprC actual_typ
         in
-        begin match Unification.subtyp g ctx.level actual_typ typ with
+        begin match Unification.subtyp g ctx.level ctx.tenv actual_typ typ with
         | () ->
             exprC
         | exception Unification.UnificationFailure ->
@@ -271,7 +271,7 @@ and check_typ g ctx expr =
 and check_annotation err_ctx g ctx typV ann =
     let _, annC = check_typ g ctx ann in
     let annV = Eval.eval g 0 ctx.venv annC in
-    begin match Unification.subtyp g ctx.level typV annV with
+    begin match Unification.subtyp g ctx.level ctx.tenv typV annV with
     | () ->
         annV
     | exception Unification.UnificationFailure ->
@@ -285,11 +285,11 @@ let rec check_env g env =
     match env with
     | [] ->
         empty_ctx, []
-    | (name, typ, kind) :: env' ->
+    | (kind, name, typ) :: env' ->
         let elab_ctx, envC = check_env g env' in
         let _, typC = check_typ g elab_ctx typ in
         ( add_local name (Eval.eval g 0 elab_ctx.venv typC) elab_ctx
-        , (name, typC, kind) :: envC )
+        , (kind, name, typC) :: envC )
 
 
 
@@ -321,7 +321,7 @@ let check_top_level g (span, top) =
                 (typC, check "global definition" g empty_ctx typV def)
             | None ->
                 let typV, defC = infer g empty_ctx def in
-                let _, typC = Quote.typ_to_core g 0 typV in
+                let typC = Quote.value_to_core g 0 typV in
                 (typC, defC)
         in
         flush_meta span g;

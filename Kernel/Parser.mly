@@ -153,8 +153,8 @@ atom_expr :
 
     | atom_expr TOK_DOT TOK_INT
         { match $3 with
-          | 1 -> mk_expr @@ Proj($1, `Fst)
-          | 2 -> mk_expr @@ Proj($1, `Snd)
+          | 1 -> mk_expr @@ Proj($1, Fst)
+          | 2 -> mk_expr @@ Proj($1, Snd)
           | _ -> failwith "invalid field of pair" }
 
     | TOK_UNDERSCORE

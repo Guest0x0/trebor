@@ -62,7 +62,7 @@ let error_equal globals err1 err2 =
         match env1, env2 with
         | [], [] ->
             true
-        | (name1, typ1, _) :: env1', (name2, typ2, _) :: env2' ->
+        | (_, name1, typ1) :: env1', (_, name2, typ2) :: env2' ->
             name1 = name2 && term_equal typ1 typ2 && env_equal env1' env2'
         | _ ->
             false
@@ -104,13 +104,13 @@ let error_equal globals err1 err2 =
 
 let wrong_type ctx typ err_ctx =
     let g = new Context.context in
-    let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
+    let env = List.rev_map (fun (name, src) -> (Syntax.Bound, name, expr_of_string src)) ctx in
     let elab_ctx, envC = Elaborate.check_env g env in
     Syntax.Error.WrongType(envC, core_of_string g elab_ctx typ, err_ctx)
 
 let type_mismatch ctx expected actual err_ctx =
     let g = new Context.context in
-    let env = List.rev_map (fun (name, src) -> (name, expr_of_string src, `Bound)) ctx in
+    let env = List.rev_map (fun (name, src) -> (Syntax.Bound, name, expr_of_string src)) ctx in
     let elab_ctx, envC = Elaborate.check_env g env in
     Syntax.Error.TypeMismatch( envC
                              , core_of_string g elab_ctx expected
@@ -153,15 +153,20 @@ let run_test (name, expectation, src) =
 
 let run_tests () =
     let open Format in
+    let tests =
+        if Array.length Sys.argv > 1
+        then List.filter (fun (name, _, _) -> Array.mem name Sys.argv) !tests
+        else !tests
+    in
     printf "@[<v>";
     let passed_cnt = List.fold_right
             (fun test passed_cnt ->
                         if run_test test
                         then passed_cnt + 1
                         else passed_cnt)
-            !tests 0
+            tests 0
     in
-    let total_cnt = List.length !tests in
+    let total_cnt = List.length tests in
     printf "summary: %d of %d tests passed@ @]" passed_cnt total_cnt;
     if passed_cnt < total_cnt then
         failwith "test failed"
